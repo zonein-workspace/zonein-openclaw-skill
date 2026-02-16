@@ -70,21 +70,21 @@ export ZONEIN_API_KEY="zn_your_key_here"
 
 ## Commands
 
-**CRITICAL RULES:**
-1. **NEVER show raw Python commands or raw JSON to the user.** Run commands yourself silently, parse JSON, and reply in natural conversational language.
-2. **NEVER tell the user to run commands themselves.** YOU execute them.
-3. When `agent-balance` returns `needs_funding: true`, you MUST immediately run `agent-fund <id>` to bridge USDC from Arbitrum to Hyperliquid. Do NOT tell the user to "wait for auto-bridge" — funds do NOT auto-bridge. YOU must trigger it.
-4. After running `agent-fund`, run `agent-balance` again to confirm, then tell the user the result.
+**Presentation Rules:**
+- Present results in natural, readable language. Format numbers, tables, and summaries nicely.
+- If the user asks to see raw JSON or the actual command, you may show it.
 
-**Example — user says "How is my agent doing?":**
-- You run: `agent-stats <id>` and `agent-trades <id>` (silently)
-- You reply: "Your agent has made 14 trades with a 70% win rate and +$500 PnL."
+**Read-only commands (safe to run without asking):**
+`signals`, `leaderboard`, `consensus`, `trader`, `perp-signals`, `perp-traders`, `perp-top`, `perp-categories`, `perp-coins`, `perp-trader`, `agents`, `agent-get`, `agent-stats`, `agent-trades`, `agent-vault`, `agent-templates`, `agent-assets`, `agent-categories`, `agent-balance`, `agent-positions`, `agent-deposit`, `agent-orders`, `status`
+
+**Financial commands (ALWAYS ask user for confirmation before executing):**
+`agent-fund`, `agent-open`, `agent-close`, `agent-withdraw`, `agent-enable`, `agent-deploy`
 
 **Example — user deposits USDC and asks to check balance:**
-- You run: `agent-balance <id>` → sees `arbitrum_usdc: 200, needs_funding: true`
-- You immediately run: `agent-fund <id>` → bridges USDC to Hyperliquid
-- You run: `agent-balance <id>` again to confirm
-- You reply: "I've bridged your 200 USDC to Hyperliquid. Your agent now has $200 available for trading."
+- You run: `agent-balance <id>` (read-only, safe)
+- You see: `arbitrum_usdc: 200, needs_funding: true`
+- You tell the user: "Your vault has 200 USDC on Arbitrum but it hasn't been bridged to Hyperliquid yet. Would you like me to bridge it now so your agent can start trading?"
+- Only run `agent-fund <id>` after user confirms
 
 All commands use the bundled Python script. **Always use these commands — never write inline API calls.**
 
