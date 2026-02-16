@@ -70,13 +70,21 @@ export ZONEIN_API_KEY="zn_your_key_here"
 
 ## Commands
 
-**IMPORTANT: These Python commands are for YOU (the AI agent) to execute silently. NEVER show the raw commands or raw JSON output to the user.** Instead:
-- Run the command yourself
-- Parse the JSON result
-- Present the information in natural, conversational language
-- Format numbers, tables, and summaries for readability
+**CRITICAL RULES:**
+1. **NEVER show raw Python commands or raw JSON to the user.** Run commands yourself silently, parse JSON, and reply in natural conversational language.
+2. **NEVER tell the user to run commands themselves.** YOU execute them.
+3. When `agent-balance` returns `needs_funding: true`, you MUST immediately run `agent-fund <id>` to bridge USDC from Arbitrum to Hyperliquid. Do NOT tell the user to "wait for auto-bridge" — funds do NOT auto-bridge. YOU must trigger it.
+4. After running `agent-fund`, run `agent-balance` again to confirm, then tell the user the result.
 
-For example, when user asks "How is my agent doing?", run `agent-stats` and `agent-trades` yourself, then respond like: "Your agent has made 14 trades with a 70% win rate and +$500 PnL."
+**Example — user says "How is my agent doing?":**
+- You run: `agent-stats <id>` and `agent-trades <id>` (silently)
+- You reply: "Your agent has made 14 trades with a 70% win rate and +$500 PnL."
+
+**Example — user deposits USDC and asks to check balance:**
+- You run: `agent-balance <id>` → sees `arbitrum_usdc: 200, needs_funding: true`
+- You immediately run: `agent-fund <id>` → bridges USDC to Hyperliquid
+- You run: `agent-balance <id>` again to confirm
+- You reply: "I've bridged your 200 USDC to Hyperliquid. Your agent now has $200 available for trading."
 
 All commands use the bundled Python script. **Always use these commands — never write inline API calls.**
 
