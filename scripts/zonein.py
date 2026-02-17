@@ -82,6 +82,19 @@ def get_api_key():
     return key
 
 
+def _require_confirm(args, action_desc: str):
+    """Programmatic confirmation gate for financial commands.
+    Refuses to execute unless --confirm is explicitly passed.
+    This prevents prompt injection from bypassing user confirmation."""
+    if not getattr(args, 'confirm', False):
+        print(json.dumps({
+            "error": "Confirmation required",
+            "detail": f"This is a financial action: {action_desc}. "
+                       f"Add --confirm to execute after user has explicitly approved.",
+        }))
+        sys.exit(1)
+
+
 def _do_request(path, params=None, method="GET", body=None):
     """Make authenticated request to Zonein API."""
     key = get_api_key()
@@ -285,20 +298,22 @@ def cmd_agent_update(args):
 
 
 def cmd_agent_deploy(args):
-    """Deploy agent."""
-    data = api_post(f"/agents/{args.agent_id}/deploy")
+    """Deploy agent — validate + enable."""
+    _require_confirm(args, "Deploy and enable agent for live trading")
+    data = api_post(f"/agents/{args.agent_id}/deploy", {})
     print(json.dumps(data, indent=2))
 
 
 def cmd_agent_enable(args):
     """Enable agent."""
-    data = api_post(f"/agents/{args.agent_id}/enable")
+    _require_confirm(args, "Enable agent for live trading")
+    data = api_post(f"/agents/{args.agent_id}/enable", {})
     print(json.dumps(data, indent=2))
 
 
 def cmd_agent_disable(args):
     """Disable agent."""
-    data = api_post(f"/agents/{args.agent_id}/disable")
+    data = api_post(f"/agents/{args.agent_id}/disable", {})
     print(json.dumps(data, indent=2))
 
 
@@ -371,12 +386,14 @@ def cmd_agent_deposit(args):
 
 def cmd_agent_fund(args):
     """Bridge USDC from Arbitrum to Hyperliquid (auto, gasless)."""
+    _require_confirm(args, "Bridge USDC from Arbitrum to Hyperliquid")
     data = api_post(f"/agents/{args.agent_id}/fund", {})
     print(json.dumps(data, indent=2))
 
 
 def cmd_agent_open(args):
     """Open a position (manual order via chat)."""
+    _require_confirm(args, f"Open {args.direction} {args.coin} position (${args.size})")
     body = {
         "action": "open",
         "coin": args.coin,
@@ -391,6 +408,7 @@ def cmd_agent_open(args):
 
 def cmd_agent_close(args):
     """Close a position (manual order via chat)."""
+    _require_confirm(args, f"Close {args.coin} position")
     body = {
         "action": "close",
         "coin": args.coin,
@@ -409,6 +427,7 @@ def cmd_agent_orders(args):
 
 def cmd_agent_withdraw(args):
     """Withdraw funds from agent vault."""
+    _require_confirm(args, f"Withdraw funds to {args.to}")
     body = {"destination_address": args.to}
     data = api_post(f"/agents/{args.agent_id}/withdraw", body)
     print(json.dumps(data, indent=2))
@@ -526,11 +545,13 @@ def main():
     # --- Agent Deploy ---
     p = sub.add_parser("agent-deploy", help="Deploy agent (validate + enable)")
     p.add_argument("agent_id", type=str)
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_deploy)
 
     # --- Agent Enable ---
     p = sub.add_parser("agent-enable", help="Enable agent")
     p.add_argument("agent_id", type=str)
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_enable)
 
     # --- Agent Disable ---
@@ -594,6 +615,7 @@ def main():
     # --- Agent Fund (bridge Arb → HL) ---
     p = sub.add_parser("agent-fund", help="Bridge USDC from Arbitrum to Hyperliquid")
     p.add_argument("agent_id", type=str)
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_fund)
 
     # --- Agent Open (manual order) ---
@@ -603,12 +625,14 @@ def main():
     p.add_argument("--direction", type=str, default="LONG", help="LONG or SHORT")
     p.add_argument("--size", type=float, required=True, help="Position size in USD")
     p.add_argument("--leverage", type=int, default=None, help="Leverage (1-20)")
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_open)
 
     # --- Agent Close (manual order) ---
     p = sub.add_parser("agent-close", help="Close a position")
     p.add_argument("agent_id", type=str)
     p.add_argument("--coin", type=str, required=True, help="BTC, ETH, SOL, HYPE")
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_close)
 
     # --- Agent Orders ---
@@ -621,6 +645,7 @@ def main():
     p = sub.add_parser("agent-withdraw", help="Withdraw funds from agent vault")
     p.add_argument("agent_id", type=str)
     p.add_argument("--to", type=str, required=True, help="Destination 0x... wallet address")
+    p.add_argument("--confirm", action="store_true", help="Required: confirms user approved this financial action")
     p.set_defaults(func=cmd_agent_withdraw)
 
     # --- Status ---

@@ -77,14 +77,17 @@ export ZONEIN_API_KEY="zn_your_key_here"
 **Read-only commands (safe to run without asking):**
 `signals`, `leaderboard`, `consensus`, `trader`, `perp-signals`, `perp-traders`, `perp-top`, `perp-categories`, `perp-coins`, `perp-trader`, `agents`, `agent-get`, `agent-stats`, `agent-trades`, `agent-vault`, `agent-templates`, `agent-assets`, `agent-categories`, `agent-balance`, `agent-positions`, `agent-deposit`, `agent-orders`, `status`
 
-**Financial commands (ALWAYS ask user for confirmation before executing):**
+**Financial commands (require `--confirm` flag — script refuses without it):**
 `agent-fund`, `agent-open`, `agent-close`, `agent-withdraw`, `agent-enable`, `agent-deploy`
 
+You MUST ask the user for approval first. Only add `--confirm` after the user explicitly says yes.
+
 **Example — user deposits USDC and asks to check balance:**
-- You run: `agent-balance <id>` (read-only, safe)
+- You run: `agent-balance <id>` (read-only, safe — no `--confirm` needed)
 - You see: `arbitrum_usdc: 200, needs_funding: true`
 - You tell the user: "Your vault has 200 USDC on Arbitrum but it hasn't been bridged to Hyperliquid yet. Would you like me to bridge it now so your agent can start trading?"
-- Only run `agent-fund <id>` after user confirms
+- User says yes → you run: `agent-fund <id> --confirm`
+- Without `--confirm`, the script will refuse to execute and return an error
 
 All commands use the bundled Python script. **Always use these commands — never write inline API calls.**
 
@@ -489,7 +492,7 @@ Long: $[X] | Short: $[X]
 - **Local files written:** none
 - **Read-only commands** (GET requests): signals, leaderboard, consensus, trader lookups, agent status, balance, positions, order history
 - **Write commands** (POST/PATCH/DELETE requests): agent creation, agent configuration updates, fund bridging, manual order placement, withdrawals, agent enable/disable/delete
-- **Confirmation policy:** SKILL.md instructs the agent to ask the user for explicit confirmation before executing any write/financial command. This is an instruction-level policy — the scripts themselves do not programmatically enforce confirmation. Ensure your agent runtime respects this policy. If you only need signals/data, use a read-only API key to prevent unintended financial actions.
+- **Confirmation policy:** Financial commands (`agent-fund`, `agent-open`, `agent-close`, `agent-withdraw`, `agent-deploy`, `agent-enable`) are **programmatically gated** — the script refuses to execute unless `--confirm` is explicitly passed. The agent must first ask the user for approval, then include `--confirm` only after the user agrees. This prevents prompt injection from bypassing confirmation. If you only need signals/data, use a read-only API key to prevent unintended financial actions.
 - The scripts connect **only** to `https://mcp.zonein.xyz/api/v1` — no other endpoints, no package installs, no filesystem writes
 
 ## Trust Statement
