@@ -483,9 +483,12 @@ Long: $[X] | Short: $[X]
 
 ## Security & Privacy
 
-- Only your API key leaves the machine (sent to mcp.zonein.xyz)
-- No personal data is sent beyond the key
-- All data is read-only (the script only makes GET requests)
+- Only your API key leaves the machine (sent as `X-API-Key` header to `mcp.zonein.xyz`)
+- No personal data is sent beyond the key and query parameters
+- **Read-only commands** (GET requests): signals, leaderboard, consensus, trader lookups, agent status, balance, positions, order history
+- **Write commands** (POST/PATCH/DELETE requests): agent creation, agent configuration updates, fund bridging, manual order placement, withdrawals, agent enable/disable/delete
+- All write/financial commands require **explicit user confirmation** before execution (see Command Rules above)
+- The script does **not** access your filesystem, install packages, or connect to any endpoint other than `https://mcp.zonein.xyz/api/v1`
 
 ## Trust Statement
 
