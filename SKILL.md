@@ -269,7 +269,8 @@ Returns: `deposit_address` (send USDC on Arbitrum One to this address).
 | `agent_id` | str | yes | Agent ID |
 
 After sending USDC to the vault address on Arbitrum, call this to auto-bridge funds into Hyperliquid.
-Privy sponsors gas — no ETH needed. Returns `tx_hash` and `amount` bridged.
+**Important:** The bridge transaction requires a small amount of ETH on Arbitrum for gas fees (typically ~0.0001–0.0005 ETH). Ask the user to send a small amount of ETH (e.g. 0.001 ETH) to the same vault address on Arbitrum One before running this command.
+Returns `tx_hash` and `amount` bridged.
 
 ### `agent-open` — Open a position (manual order via chat)
 
@@ -361,8 +362,9 @@ The vault (deposit address) is auto-created with the agent. The create response 
 1. Show user the deposit address from the create response (or use `agent-deposit <agent_id>`)
 2. Tell user: "Send USDC to this address on Arbitrum One."
 3. `agent-balance <agent_id>` — check `arbitrum_usdc` field to confirm deposit arrived
-4. `agent-fund <agent_id>` — bridge USDC from Arbitrum into Hyperliquid (gasless, no ETH needed)
-5. `agent-balance <agent_id>` — confirm Hyperliquid `account_value` shows the funds
+4. Tell user: "Also send a small amount of ETH (~0.001 ETH) to the same vault address on Arbitrum One for gas fees."
+5. `agent-fund <agent_id> --confirm` — bridge USDC from Arbitrum into Hyperliquid (requires ETH for gas)
+6. `agent-balance <agent_id>` — confirm Hyperliquid `account_value` shows the funds
 
 **Step 7: Monitor**
 - `agent-balance <agent_id>` — check vault balance
@@ -377,8 +379,9 @@ The vault (deposit address) is auto-created with the agent. The create response 
 1. `agent-deposit <agent_id>` — get vault address
 2. User sends USDC to vault address on **Arbitrum One**
 3. `agent-balance <agent_id>` — check `arbitrum_usdc` to verify deposit arrived
-4. `agent-fund <agent_id>` — bridge USDC from Arbitrum → Hyperliquid (gasless)
-5. `agent-balance <agent_id>` — confirm `account_value` on Hyperliquid
+4. User also sends a small amount of ETH (~0.001 ETH) to the same vault address for gas fees
+5. `agent-fund <agent_id> --confirm` — bridge USDC from Arbitrum → Hyperliquid (requires ETH for gas)
+6. `agent-balance <agent_id>` — confirm `account_value` on Hyperliquid
 
 **Withdraw:**
 1. `agent-disable <agent_id>` — must disable agent first
