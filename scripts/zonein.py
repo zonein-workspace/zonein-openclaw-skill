@@ -18,10 +18,15 @@ Commands:
   leaderboard      — PM leaderboard (top traders by PnL)
   consensus        — PM consensus positions
   trader <wallet>  — PM trader profile + performance
+  pm-top           — PM top traders by smart score
+  smart-bettors    — PM smart money bettors (high ROI)
+  trader-positions <wallet> — PM trader current positions
+  trader-trades <wallet> — PM trader trade history
   perp-signals     — Perp trading signals (HyperLiquid)
   perp-traders     — Perp smart money traders
   perp-top         — Perp top performers by PnL
   perp-categories  — Perp trader categories
+  perp-category-stats — Perp category statistics
   perp-coins       — Perp coin distribution
   perp-trader <addr> — Perp trader details
   agents           — List your trading agents
@@ -48,6 +53,14 @@ Commands:
   agent-templates  — Available agent types & config templates
   agent-assets     — Available trading assets
   agent-categories — Smart money categories with stats
+  agent-overview <id> — Agent overview (PnL, ROI, win rate) via AgentsArena
+  agent-performance <id> — Advanced performance metrics via AgentsArena
+  agent-check      — Check pending trade plans across all agents (HITL)
+  agent-plans <id> — List trade plans for a specific agent
+  agent-plan-detail <id> <plan_id> — Full trade plan with evidence
+  agent-plan-action <id> <plan_id> <action> — Approve/reject/edit/paper a plan
+  agent-plan-history <id> — Past trade plans (audit trail)
+  agent-signal <sym> — Raw composite data for agents (SM + TA + Market)
   dashboard        — AI Dashboard overview (top signals all types)
   dashboard-latest — Latest AI signal snapshots by asset type
   dashboard-asset  — Full detail for single asset (SM + TA + Market)
@@ -57,6 +70,10 @@ Commands:
   ta <sym>         — Multi-timeframe TA indicators
   ta-single <sym> <ind> — Single TA indicator value
   liquidation-map <coin> — Liquidation price distribution
+  telegram-setup-init — Easy Telegram setup (bot_token only)
+  telegram-setup   — Full Telegram setup (bot_token + chat_id)
+  telegram-config  — View current Telegram notification config
+  telegram-disable — Disable Telegram notifications
   status           — Check API key status
 """
 
@@ -224,6 +241,35 @@ def cmd_trader(args):
     _output(data)
 
 
+def cmd_pm_top(args):
+    """PM top traders by smart score."""
+    params = {"limit": args.limit}
+    if args.min_score:
+        params["min_score"] = args.min_score
+    data = api_request("/pm/traders/top", params)
+    _output(data)
+
+
+def cmd_smart_bettors(args):
+    """PM smart money bettors (high ROI, high trade count)."""
+    params = {"limit": args.limit}
+    data = api_request("/pm/traders/smart-bettors", params)
+    _output(data)
+
+
+def cmd_trader_positions(args):
+    """PM trader current positions."""
+    data = api_request(f"/pm/trader/{args.wallet}/positions")
+    _output(data)
+
+
+def cmd_trader_trades(args):
+    """PM trader trade history."""
+    params = {"limit": args.limit}
+    data = api_request(f"/pm/trader/{args.wallet}/trades", params)
+    _output(data)
+
+
 def cmd_perp_signals(args):
     """Perp trading signals."""
     params = {"limit": args.limit}
@@ -256,6 +302,12 @@ def cmd_perp_top(args):
 def cmd_perp_categories(args):
     """Perp categories."""
     data = api_request("/perp/categories")
+    _output(data)
+
+
+def cmd_perp_category_stats(args):
+    """Perp category stats."""
+    data = api_request("/perp/categories/stats")
     _output(data)
 
 
@@ -294,6 +346,8 @@ def cmd_agent_create(args):
         body["max_leverage"] = args.leverage
     if args.description:
         body["description"] = args.description
+    if args.execution_mode:
+        body["execution_mode"] = args.execution_mode
     if args.risk_per_trade:
         body.setdefault("risk_profile", {})["risk_per_trade_percent"] = args.risk_per_trade
     if args.max_daily_loss:
@@ -310,6 +364,14 @@ def cmd_agent_create(args):
         body["strength_thresholds"] = json.loads(args.strength_thresholds)
     if args.timeframe_weights:
         body["timeframe_weights"] = json.loads(args.timeframe_weights)
+    if args.signal_weights:
+        body["signal_weights"] = json.loads(args.signal_weights)
+    if args.trigger_conditions:
+        body["trigger_conditions"] = json.loads(args.trigger_conditions)
+    if args.trading_risk:
+        body["trading_risk"] = json.loads(args.trading_risk)
+    if args.prompt_config:
+        body["prompt_config"] = json.loads(args.prompt_config)
     data = api_post("/agents/", body)
     _output(data)
 
@@ -385,6 +447,10 @@ def cmd_agent_stats(args):
 def cmd_agent_trades(args):
     """Agent trade history."""
     params = {"limit": args.limit}
+    if getattr(args, 'offset', 0):
+        params["offset"] = args.offset
+    if getattr(args, 'filter', 'all') != 'all':
+        params["filter"] = args.filter
     data = api_request(f"/agents/{args.agent_id}/trades", params)
     _output(data)
 
@@ -574,6 +640,92 @@ def cmd_agent_backtests(args):
     _output(data)
 
 
+def cmd_agent_overview(args):
+    """Agent overview (name, PnL, ROI, win rate, config, status) via AgentsArena."""
+    data = api_request(f"/agents/{args.agent_id}/overview")
+    _output(data)
+
+
+def cmd_agent_performance(args):
+    """Detailed agent performance + advanced metrics via AgentsArena."""
+    data = api_request(f"/agents/{args.agent_id}/performance")
+    _output(data)
+
+
+def cmd_agent_check(args):
+    """Check pending trade plans across all agents (HITL)."""
+    data = api_request("/agents/plans/pending")
+    _output(data)
+
+
+def cmd_agent_plans(args):
+    """List trade plans for a specific agent."""
+    params = {"limit": args.limit}
+    if args.status:
+        params["status"] = args.status
+    data = api_request(f"/agents/{args.agent_id}/plans", params)
+    _output(data)
+
+
+def cmd_agent_plan_detail(args):
+    """Get full detail for a specific trade plan."""
+    data = api_request(f"/agents/{args.agent_id}/plans/{args.plan_id}")
+    _output(data)
+
+
+def cmd_agent_plan_action(args):
+    """Act on a pending trade plan (approve/reject/edit/paper)."""
+    if args.action in ("approve", "edit"):
+        _require_confirm(args, f"{args.action.title()} trade plan {args.plan_id}")
+    body = {"action": args.action}
+    if args.notes:
+        body["notes"] = args.notes
+    if args.edits:
+        body["edits"] = json.loads(args.edits)
+    data = api_post(f"/agents/{args.agent_id}/plans/{args.plan_id}/action", body)
+    _output(data)
+
+
+def cmd_agent_plan_history(args):
+    """Past trade plans (approved, rejected, executed, expired)."""
+    params = {"status": "all", "limit": args.limit}
+    data = api_request(f"/agents/{args.agent_id}/plans", params)
+    _output(data)
+
+
+def cmd_telegram_setup_init(args):
+    """Easy Telegram setup: provide bot_token only, then send /start to bot."""
+    data = api_post("/telegram/setup-init", {"bot_token": args.bot_token})
+    _output(data)
+
+
+def cmd_telegram_setup(args):
+    """Full Telegram setup with bot_token + chat_id."""
+    data = api_post("/telegram/setup", {"bot_token": args.bot_token, "chat_id": args.chat_id})
+    _output(data)
+
+
+def cmd_telegram_config(args):
+    """View current Telegram notification config."""
+    data = api_request("/telegram/config")
+    _output(data)
+
+
+def cmd_telegram_disable(args):
+    """Disable Telegram notifications and remove webhook."""
+    data = api_delete("/telegram/config")
+    _output(data)
+
+
+def cmd_agent_signal(args):
+    """Raw composite data for trading agents (SM + TA + Market in one call)."""
+    params = {}
+    if args.categories:
+        params["categories"] = args.categories
+    data = api_request(f"/dashboard/agent-signal/perp/{args.symbol.upper()}", params)
+    _output(data)
+
+
 def cmd_dashboard(args):
     """AI Dashboard overview — top signals across all asset types."""
     data = api_request("/dashboard/overview")
@@ -684,6 +836,28 @@ def main():
     p.add_argument("wallet", type=str)
     p.set_defaults(func=cmd_trader)
 
+    # --- PM Top Traders ---
+    p = sub.add_parser("pm-top", help="PM top traders by smart score")
+    p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--min-score", type=float, default=None)
+    p.set_defaults(func=cmd_pm_top)
+
+    # --- PM Smart Bettors ---
+    p = sub.add_parser("smart-bettors", help="PM smart money bettors (high ROI)")
+    p.add_argument("--limit", type=int, default=50)
+    p.set_defaults(func=cmd_smart_bettors)
+
+    # --- PM Trader Positions ---
+    p = sub.add_parser("trader-positions", help="PM trader current positions")
+    p.add_argument("wallet", type=str)
+    p.set_defaults(func=cmd_trader_positions)
+
+    # --- PM Trader Trades ---
+    p = sub.add_parser("trader-trades", help="PM trader trade history")
+    p.add_argument("wallet", type=str)
+    p.add_argument("--limit", type=int, default=100)
+    p.set_defaults(func=cmd_trader_trades)
+
     # --- Perp Signals ---
     p = sub.add_parser("perp-signals", help="Perp trading signals")
     p.add_argument("--limit", type=int, default=20)
@@ -707,6 +881,10 @@ def main():
     # --- Perp Categories ---
     p = sub.add_parser("perp-categories", help="Perp trader categories")
     p.set_defaults(func=cmd_perp_categories)
+
+    # --- Perp Category Stats ---
+    p = sub.add_parser("perp-category-stats", help="Perp category statistics")
+    p.set_defaults(func=cmd_perp_category_stats)
 
     # --- Perp Coins ---
     p = sub.add_parser("perp-coins", help="Perp coin distribution")
@@ -742,6 +920,11 @@ def main():
     p.add_argument("--min-consensus", type=float, default=None, help="Min SM consensus 0-1")
     p.add_argument("--strength-thresholds", type=str, default=None, help="JSON: {\"BTC\": {\"min_strength_buy\": 70, \"min_strength_sell\": 65}, ...}")
     p.add_argument("--timeframe-weights", type=str, default=None, help="JSON: {\"24h\": 0.5, \"4h\": 0.35, \"1h\": 0.15}")
+    p.add_argument("--execution-mode", type=str, default=None, help="auto (fully automated) or hitl (human-in-the-loop)")
+    p.add_argument("--signal-weights", type=str, default=None, help="JSON: {\"sm\":40,\"ta\":35,\"market\":25} (must sum to 100)")
+    p.add_argument("--trigger-conditions", type=str, default=None, help="JSON: entry/exit trigger conditions")
+    p.add_argument("--trading-risk", type=str, default=None, help="JSON: {max_positions, max_position_size_pct, default_stop_loss_pct, default_take_profit_pct, max_leverage}")
+    p.add_argument("--prompt-config", type=str, default=None, help="JSON: {trading_strategy, custom_rules, risk_management}")
     p.set_defaults(func=cmd_agent_create)
 
     # --- Agent Update ---
@@ -791,10 +974,22 @@ def main():
     p.add_argument("agent_id", type=str)
     p.set_defaults(func=cmd_agent_stats)
 
+    # --- Agent Overview ---
+    p = sub.add_parser("agent-overview", help="Agent overview (PnL, ROI, win rate, config) via AgentsArena")
+    p.add_argument("agent_id", type=str)
+    p.set_defaults(func=cmd_agent_overview)
+
+    # --- Agent Performance ---
+    p = sub.add_parser("agent-performance", help="Detailed performance + advanced metrics via AgentsArena")
+    p.add_argument("agent_id", type=str)
+    p.set_defaults(func=cmd_agent_performance)
+
     # --- Agent Trades ---
     p = sub.add_parser("agent-trades", help="Agent trade history")
     p.add_argument("agent_id", type=str)
     p.add_argument("--limit", type=int, default=50)
+    p.add_argument("--offset", type=int, default=0, help="Pagination offset")
+    p.add_argument("--filter", type=str, default="all", help="Filter: all, wins, losses")
     p.set_defaults(func=cmd_agent_trades)
 
     # --- Agent Vault ---
@@ -879,6 +1074,64 @@ def main():
     p.add_argument("agent_id", type=str)
     p.add_argument("--limit", type=int, default=10)
     p.set_defaults(func=cmd_agent_backtests)
+
+    # --- Agent Check (HITL — all pending plans) ---
+    p = sub.add_parser("agent-check", help="Check pending trade plans across all agents (HITL)")
+    p.set_defaults(func=cmd_agent_check)
+
+    # --- Agent Plans ---
+    p = sub.add_parser("agent-plans", help="List trade plans for a specific agent")
+    p.add_argument("agent_id", type=str)
+    p.add_argument("--status", type=str, default=None, help="Filter: pending, approved, rejected, expired, all")
+    p.add_argument("--limit", type=int, default=20)
+    p.set_defaults(func=cmd_agent_plans)
+
+    # --- Agent Plan Detail ---
+    p = sub.add_parser("agent-plan-detail", help="Get full trade plan with evidence")
+    p.add_argument("agent_id", type=str)
+    p.add_argument("plan_id", type=str)
+    p.set_defaults(func=cmd_agent_plan_detail)
+
+    # --- Agent Plan Action (approve/reject/edit/paper) ---
+    p = sub.add_parser("agent-plan-action", help="Act on a pending trade plan")
+    p.add_argument("agent_id", type=str)
+    p.add_argument("plan_id", type=str)
+    p.add_argument("action", type=str, help="approve, reject, edit, paper")
+    p.add_argument("--notes", type=str, default=None, help="User reasoning for the action")
+    p.add_argument("--edits", type=str, default=None, help="JSON: {entry, stop_loss, take_profit, size_usd, leverage}")
+    p.add_argument("--confirm", action="store_true", help=CONFIRM_HELP)
+    p.set_defaults(func=cmd_agent_plan_action)
+
+    # --- Agent Plan History ---
+    p = sub.add_parser("agent-plan-history", help="Past trade plans (approved, rejected, executed, expired)")
+    p.add_argument("agent_id", type=str)
+    p.add_argument("--limit", type=int, default=20)
+    p.set_defaults(func=cmd_agent_plan_history)
+
+    # --- Telegram Setup Init ---
+    p = sub.add_parser("telegram-setup-init", help="Easy Telegram setup (bot_token only, then send /start)")
+    p.add_argument("--bot-token", type=str, required=True, help="Telegram bot token from @BotFather")
+    p.set_defaults(func=cmd_telegram_setup_init)
+
+    # --- Telegram Setup ---
+    p = sub.add_parser("telegram-setup", help="Full Telegram setup with bot_token + chat_id")
+    p.add_argument("--bot-token", type=str, required=True, help="Telegram bot token from @BotFather")
+    p.add_argument("--chat-id", type=str, required=True, help="Your Telegram chat ID")
+    p.set_defaults(func=cmd_telegram_setup)
+
+    # --- Telegram Config ---
+    p = sub.add_parser("telegram-config", help="View current Telegram notification config")
+    p.set_defaults(func=cmd_telegram_config)
+
+    # --- Telegram Disable ---
+    p = sub.add_parser("telegram-disable", help="Disable Telegram notifications + remove webhook")
+    p.set_defaults(func=cmd_telegram_disable)
+
+    # --- Agent Signal (raw composite data) ---
+    p = sub.add_parser("agent-signal", help="Raw composite data for trading agents (SM + TA + Market)")
+    p.add_argument("symbol", type=str, help="Coin symbol: BTC, ETH, SOL, etc.")
+    p.add_argument("--categories", type=str, default=None, help="Comma-separated SM wallet categories to filter")
+    p.set_defaults(func=cmd_agent_signal)
 
     # --- Dashboard Overview ---
     p = sub.add_parser("dashboard", help="AI Dashboard overview — top signals across all asset types")
