@@ -372,6 +372,8 @@ def cmd_agent_create(args):
         body["trading_risk"] = json.loads(args.trading_risk)
     if args.prompt_config:
         body["prompt_config"] = json.loads(args.prompt_config)
+    if args.withdrawal_addresses:
+        body["withdrawal_addresses"] = [a.strip() for a in args.withdrawal_addresses.split(",")]
     data = api_post("/agents/", body)
     _output(data)
 
@@ -389,16 +391,28 @@ def cmd_agent_update(args):
         body["smart_money_categories"] = args.categories.split(",")
     if args.leverage:
         body["max_leverage"] = args.leverage
-    if args.methodology:
-        body.setdefault("prompt_config", {})["trading_methodology"] = args.methodology
-    if args.entry_strategy:
-        body.setdefault("prompt_config", {})["entry_strategy"] = args.entry_strategy
-    if args.exit_framework:
-        body.setdefault("prompt_config", {})["exit_framework"] = args.exit_framework
+    if args.execution_mode:
+        body["execution_mode"] = args.execution_mode
+    if args.prompt_config:
+        body["prompt_config"] = json.loads(args.prompt_config)
+    if args.trading_strategy:
+        body.setdefault("prompt_config", {})["trading_strategy"] = args.trading_strategy
+    if args.custom_rules:
+        body.setdefault("prompt_config", {})["custom_rules"] = args.custom_rules
+    if args.risk_management:
+        body.setdefault("prompt_config", {})["risk_management"] = args.risk_management
+    if args.trigger_conditions:
+        body["trigger_conditions"] = json.loads(args.trigger_conditions)
+    if args.trading_risk:
+        body["trading_risk"] = json.loads(args.trading_risk)
+    if args.signal_weights:
+        body["signal_weights"] = json.loads(args.signal_weights)
     if args.strength_thresholds:
         body["strength_thresholds"] = json.loads(args.strength_thresholds)
     if args.timeframe_weights:
         body["timeframe_weights"] = json.loads(args.timeframe_weights)
+    if args.withdrawal_addresses:
+        body["withdrawal_addresses"] = [a.strip() for a in args.withdrawal_addresses.split(",")]
     if not body:
         print(json.dumps({"error": "No updates provided"}))
         sys.exit(1)
@@ -925,6 +939,7 @@ def main():
     p.add_argument("--trigger-conditions", type=str, default=None, help="JSON: entry/exit trigger conditions")
     p.add_argument("--trading-risk", type=str, default=None, help="JSON: {max_positions, max_position_size_pct, default_stop_loss_pct, default_take_profit_pct, max_leverage}")
     p.add_argument("--prompt-config", type=str, default=None, help="JSON: {trading_strategy, custom_rules, risk_management}")
+    p.add_argument("--withdrawal-addresses", type=str, default=None, help="Comma-separated 0x... addresses for withdrawal whitelist")
     p.set_defaults(func=cmd_agent_create)
 
     # --- Agent Update ---
@@ -935,11 +950,17 @@ def main():
     p.add_argument("--assets", type=str, default=None, help="Comma-separated: BTC,ETH,SOL,HYPE")
     p.add_argument("--categories", type=str, default=None, help="Comma-separated SM categories")
     p.add_argument("--leverage", type=int, default=None)
-    p.add_argument("--methodology", type=str, default=None, help="Trading methodology text")
-    p.add_argument("--entry-strategy", type=str, default=None, help="Entry strategy text")
-    p.add_argument("--exit-framework", type=str, default=None, help="Exit framework text")
-    p.add_argument("--strength-thresholds", type=str, default=None, help="JSON: {\"BTC\": {\"min_strength_buy\": 70, \"min_strength_sell\": 65}, ...}")
+    p.add_argument("--execution-mode", type=str, default=None, help="auto or hitl")
+    p.add_argument("--prompt-config", type=str, default=None, help="JSON: {trading_strategy, custom_rules, risk_management}")
+    p.add_argument("--trading-strategy", type=str, default=None, help="Overall trading approach for LLM")
+    p.add_argument("--custom-rules", type=str, default=None, help="Specific entry/exit rules for LLM")
+    p.add_argument("--risk-management", type=str, default=None, help="Risk management rules for LLM")
+    p.add_argument("--trigger-conditions", type=str, default=None, help="JSON: entry/exit trigger conditions")
+    p.add_argument("--trading-risk", type=str, default=None, help="JSON: {max_positions, max_position_size_pct, default_stop_loss_pct, default_take_profit_pct, max_leverage}")
+    p.add_argument("--signal-weights", type=str, default=None, help="JSON: {\"sm\":40,\"ta\":35,\"market\":25} (must sum to 100)")
+    p.add_argument("--strength-thresholds", type=str, default=None, help="JSON: {\"BTC\": {\"min_strength_buy\": 70, ...}}")
     p.add_argument("--timeframe-weights", type=str, default=None, help="JSON: {\"24h\": 0.5, \"4h\": 0.35, \"1h\": 0.15}")
+    p.add_argument("--withdrawal-addresses", type=str, default=None, help="Comma-separated 0x... addresses for withdrawal whitelist")
     p.set_defaults(func=cmd_agent_update)
 
     # --- Agent Deploy ---

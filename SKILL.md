@@ -952,46 +952,80 @@ Each preset auto-fills SM categories, strength thresholds, and timeframe weights
 | Moderate | 5x | 5%/10% (1:2 RR) | 5 | 15% | 3% |
 | Aggressive | 10x | 5%/7.5% (1:1.5 RR) | 8 | 20% | 5% |
 
-**Q4: How should the agent decide when to enter a trade?** → `trigger_conditions` + `signal_weights` + `prompt_config`
+**Q4: Describe your trading strategy** → `trigger_conditions` + `signal_weights` + `prompt_config`
 
 **⚠️ REQUIRED — Always ask this.** This is the most important question. All agents use SM + TA + Market data — this question determines the **trading philosophy**: when to pull the trigger, how patient to be, and what edge to exploit.
 
 **How to ask:**
-> "The agent always analyzes Smart Money, Technical, and Market data together. The real question is: **what's your trading philosophy?**"
+Show 3 random examples from the 20 below, then ask user to describe their strategy. Each user should see different examples.
+
+> "Describe your trading strategy in 2-3 sentences. Be specific about which signals matter most to you."
 >
-> - **A) Trend Following** — Wait for SM + TA to confirm a clear trend, then ride it. Patient, fewer trades, larger moves. Best for swing/position styles.
-> - **B) Early Entry** — Enter as soon as SM wallets show strong conviction, before TA fully confirms. Catch moves early, accept more false signals. Best for momentum/scalping.
-> - **C) Contrarian** — Fade extreme sentiment: enter when funding rate is extreme + RSI overbought/oversold BUT SM starts showing reversal. Counter-trend, high risk/reward.
-> - **D) High-Conviction Filter** — Require ALL signals to strongly align (SM consensus ≥70%, TA trend confirmed, favorable funding + OI). Very few trades but highest win rate.
-> - **E) Custom** — Describe your edge in your own words and I'll build the conditions.
+> **Examples (pick 3 to show):**
+
+**20 Strategy Examples** (each is unique style + specific metrics):
+
+1. **Trend Confirmation Rider** — "Enter LONG when SM long_ratio ≥55% with ≥3 wallets AND SuperTrend shows 'buy' on 4h AND ADX ≥20 confirms trend strength. Exit when SM flips to short_ratio ≥55% OR RSI 4h crosses above 75."
+
+2. **Momentum Scalper** — "Quick entries when SM wallet_count jumps ≥5 in 1h timeframe with long_ratio ≥60%. RSI must be between 40-65 (not overbought). Take profit at 1.5% or when MACD histogram flips negative. Tight 0.8% stop loss."
+
+3. **Whale Accumulation Hunter** — "Enter when SM 24h long_volume exceeds short_volume by 2x AND wallet_count ≥5 BUT price hasn't moved yet (price_change_24h < 1%). Catch the move before retail notices. Hold until SM consensus weakens below 50%."
+
+4. **Contrarian Funding Fader** — "SHORT when funding_current ≥0.04% (crowded longs) AND RSI 4h ≥72 AND SM short_ratio starting to rise (≥40%). LONG when funding ≤-0.03% AND RSI ≤28 AND SM long_ratio rising. Fade extreme sentiment with SM confirmation."
+
+5. **Multi-Timeframe Sniper** — "Require 1d SuperTrend = 'buy' (macro trend) AND 4h RSI ≤45 (pullback) AND 1h SM long_ratio ≥60% (short-term catalyst). Only enter when all 3 timeframes align. Very patient, 1-2 trades per week."
+
+6. **Liquidation Cascade Catcher** — "Enter LONG after liquidation_short_4h spikes above $5M (short squeeze starting) AND taker_buy_sell_ratio >0.52 AND SM long_ratio ≥55%. Ride the cascade. Exit when liquidation flow reverses."
+
+7. **OI Divergence Trader** — "LONG when oi_change_4h rising >2% BUT price flat or slightly down (accumulation) AND SM wallet_count increasing. SHORT when OI rising but price pumping with extreme funding >0.03% (late longs about to get rekt)."
+
+8. **RSI Oversold Bouncer** — "Enter LONG only when RSI 4h drops below 28 AND Stoch K <15 (deeply oversold) AND SM long_ratio ≥50% (smart money not panicking). Target RSI mean reversion to 50. Conservative 2% stop below recent low."
+
+9. **Bollinger Squeeze Breakout** — "Wait for Bollinger Band squeeze (bands narrowing) on 4h, then enter direction of first strong candle close outside bands. Confirm with SM ratio ≥55% same direction AND MACD histogram crossing zero. Ride volatility expansion."
+
+10. **Smart Money Front-Runner** — "Enter immediately when SM 1h wallet_count jumps from <3 to ≥5 with strong directional bias (long_ratio ≥65% or short_ratio ≥65%). Don't wait for TA confirmation — speed matters. Tight stop, let winners run."
+
+11. **EMA Trend Surfer** — "Only trade when EMA9 > EMA21 > EMA55 on 4h (clear uptrend). Enter on pullbacks to EMA21 when RSI 1h touches 40-45 AND SM long_ratio holds ≥55%. Exit when EMA9 crosses below EMA21."
+
+12. **Funding Rate Arbitrageur** — "Go against extreme funding: SHORT when funding ≥0.05% for 3+ consecutive periods AND RSI 4h ≥70. LONG when funding ≤-0.04% AND RSI ≤35. Collect funding while fading overextended positions. Requires SM ≥45% same direction as trade."
+
+13. **Volume Climax Reversal** — "Enter counter-trend after volume_24h spikes 3x average AND RSI hits extreme (≤20 or ≥80) AND SM ratio starts flipping. Catch the exhaustion reversal. Tight stop just beyond the climax candle."
+
+14. **ADX Trend Strength Filter** — "Only enter when ADX 4h ≥25 (strong trend confirmed). Direction from SuperTrend. Require SM consensus ≥55% same direction AND MACD histogram positive for LONG. Skip trades when ADX <20 (ranging market)."
+
+15. **Taker Ratio Momentum** — "Enter LONG when taker_buy_sell_ratio >0.53 (aggressive buying) AND SM long_ratio ≥55% AND RSI 1h <65. Enter SHORT when ratio <0.47 AND SM short_ratio ≥55%. Follow the aggressive flow."
+
+16. **Conservative Diamond Hands** — "Only BTC and ETH. Enter when SM consensus ≥70% with ≥7 wallets AND 1d SuperTrend confirmed AND RSI 1d between 35-60 (not extended). Hold through 5-10% drawdowns if SM consensus holds. Target 10%+ moves."
+
+17. **Stochastic Crossover Scalper** — "Enter when Stoch K crosses above D from below 20 (bullish crossover) AND SM 1h long_ratio ≥55% AND MACD histogram turning positive. Quick 1-2% targets. Exit immediately if Stoch K crosses back below D."
+
+18. **Long/Short Ratio Contrarian** — "SHORT when market.long_ratio ≥68% (retail extremely long) AND funding positive AND SM short_ratio ≥45% (smart money positioning opposite). LONG when short_ratio ≥65% AND SM long_ratio ≥50%. Fade the herd."
+
+19. **Ichimoku Cloud Breakout** — "Enter when price breaks above Ichimoku cloud on 4h AND conversion line > base line AND SM long_ratio ≥55%. Strong trend continuation signal. Stop loss below cloud. Let it run while above cloud."
+
+20. **Volatility Expansion Entry** — "Enter when ATR 4h expands 50%+ from 20-period average (volatility waking up) AND direction confirmed by SM consensus ≥60% AND SuperTrend aligned. Catch the start of big moves, not the middle."
+
+---
+
+**How to collect user strategy:**
+
+Show 3 random examples, then ask:
+> "Here are some strategy ideas:"
+> - *[Example 7]*
+> - *[Example 3]*
+> - *[Example 15]*
 >
-> Or describe in your own words, e.g., "Enter when SM wallets are accumulating but price hasn't moved yet — catch the move before it happens"
+> "Describe your strategy in 2-3 sentences with specific metrics. What signals should trigger entry? What conditions mean exit?"
 
-**Mapping from answer to config:**
+**If user describes in their own words:** Use the Intent → trigger_conditions translation guide below to build custom conditions. **DO NOT** show JSON to user. Build it, then summarize back in plain language for confirmation.
 
-| Answer | Entry timing | `trigger_conditions` key difference | `signal_weights` | Trade frequency |
-|--------|-------------|-------------------------------------|-------------------|-----------------|
-| A) Trend Following | After SM + TA confirm | SM ratio ≥55 + SuperTrend aligned + ADX ≥20 (trend strength) | sm:40, ta:35, market:25 | Medium (3-5/week) |
-| B) Early Entry | SM leads, TA just not-against | SM ratio ≥60 + wallet_count ≥3, RSI not extreme (just filter) | sm:50, ta:25, market:25 | High (5-10/week) |
-| C) Contrarian | Sentiment extreme + SM reversal | funding_rate extreme + RSI ≥75/≤25 + SM ratio flipping direction | sm:40, ta:30, market:30 | Low (1-3/week) |
-| D) High-Conviction | All signals strongly aligned | SM ratio ≥70 + wallet ≥5 + SuperTrend + RSI + MACD + favorable funding | sm:35, ta:35, market:30 | Very low (1-2/week) |
-| E) Custom | based on description | AI generates from user intent | based on description | Varies |
+**If user says "defaults" / "use defaults":** Use preset from Q2 (trading style). Still generate `custom_rules` describing what the preset does.
 
-**How each answer changes the agent's behavior:**
-- **A vs B:** A waits for trend confirmation (fewer false entries); B enters earlier (catches more moves but more whipsaws)
-- **C:** Only enters against the crowd — needs extreme conditions to trigger, but captures big reversals
-- **D:** Strictest filter — may go days without trading but almost every trade is high quality
-- **E:** User describes their edge, AI translates to conditions
+**If user picks/modifies an example:** Use that example's logic, adjust based on their risk profile (Q3).
 
-**If user picks A-D:** Use the corresponding template, generate `prompt_config.custom_rules` describing the logic in plain language. Adjust `trigger_conditions` thresholds based on the agent_type preset.
-
-**If user picks E or describes in their own words:** Use the Intent → trigger_conditions translation guide below to build custom conditions. **DO NOT** show JSON to user. Build it, then summarize back in plain language for confirmation.
-
-**If user says "defaults" / "use defaults":** Use preset from Q2. Still generate `custom_rules` describing what the preset does.
-
-**Follow-up (always ask for C and E, optional for others):**
-> "When should the agent exit a position?"
-> e.g., "When SM flips direction" / "When profit hits 2x risk" / "When funding reverses"
+**Always ask follow-up:**
+> "When should the agent exit a winning position? And when should it cut losses?"
+> e.g., "TP at 2x risk, SL at -1.5%" / "Exit when SM flips" / "Trail stop after 1.5% profit"
 
 **Q5: Execution mode?** → `execution_mode`
 
