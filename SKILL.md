@@ -98,7 +98,7 @@ export ZONEIN_API_KEY="zn_your_key_here"
 `telegram-setup-init`, `telegram-setup`, `telegram-disable`
 
 **Financial commands (require `--confirm` flag — script refuses without it):**
-`agent-fund`, `agent-open`, `agent-close`, `agent-withdraw`, `agent-enable`, `agent-deploy`, `agent-backtest`
+`agent-fund`, `agent-open`, `agent-close`, `agent-update-sl-tp`, `agent-withdraw`, `agent-enable`, `agent-deploy`, `agent-backtest`
 
 You MUST ask the user for approval before running any state-changing or financial command.
 For financial commands, only add `--confirm` after the user explicitly says yes.
@@ -517,7 +517,9 @@ After sending USDC to the vault address on Arbitrum, call this to auto-bridge fu
 **Gas fees are sponsored by Zonein** — no ETH needed. Users only need to send USDC.
 Returns `tx_hash` and `amount` bridged.
 
-### `agent-open` — Open a position (manual order via chat)
+### `agent-open` — Open a position (executes immediately on Hyperliquid)
+
+Places a market order on Hyperliquid immediately via Privy wallet signing. **Requires `--confirm`** (financial action).
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -525,14 +527,27 @@ Returns `tx_hash` and `amount` bridged.
 | `--coin` | str | yes | BTC, ETH, SOL, HYPE |
 | `--direction` | str | no (default LONG) | LONG or SHORT |
 | `--size` | float | yes | Position size in USD |
-| `--leverage` | int | no | Leverage (1–20) |
+| `--leverage` | int | no | Leverage (1–20, default from agent config) |
 
-### `agent-close` — Close a position
+### `agent-close` — Close a position (executes immediately on Hyperliquid)
+
+Cancels existing SL/TP orders, then places a market close order. **Requires `--confirm`** (financial action).
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `agent_id` | str | yes | Agent ID |
 | `--coin` | str | yes | Coin to close (BTC, ETH, SOL, HYPE) |
+
+### `agent-update-sl-tp` — Update stop-loss / take-profit (executes immediately on Hyperliquid)
+
+Cancels existing SL/TP orders for the coin and places new ones. Provide one or both.
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `agent_id` | str | yes | Agent ID |
+| `--coin` | str | yes | Token symbol |
+| `--stop-loss` | float | no | New stop loss price |
+| `--take-profit` | float | no | New take profit price |
 
 ### `agent-orders` — Manual order history
 
@@ -568,7 +583,9 @@ Use this in a cron job to poll for new plans. If no pending plans, returns empty
 
 Returns the complete plan: symbol, direction, entry price, SL/TP, confidence, and full evidence breakdown (SM consensus, TA indicators, market conditions, LLM reasoning).
 
-### `agent-approve` — Approve a pending trade plan
+### `agent-approve` — Approve a pending trade plan (executes immediately on Hyperliquid)
+
+Approving a plan **immediately places the order on Hyperliquid** (market order + SL/TP + leverage). The user gets a Telegram confirmation with fill details.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -582,6 +599,8 @@ Returns the complete plan: symbol, direction, entry price, SL/TP, confidence, an
 **Requires `--confirm`** (financial action).
 
 ### `agent-reject` — Reject a pending trade plan
+
+Rejecting a plan triggers a **30-minute cooldown** — the agent will not create a new plan for the same token during this period.
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
@@ -1072,7 +1091,7 @@ Ask: "What's your wallet address for withdrawals? This restricts where funds can
 | "MACD bullish / momentum rising" | `ta.4h.macd_hist > 0` |
 | "uptrend / trend is up" | `ta.4h.supertrend_advice == "buy"` |
 | "downtrend / trend is down" | `ta.4h.supertrend_advice == "sell"` |
-| "strong trend" | `ta.4h.adx >= 18` (moderate) or `>= 25` (strong) |
+| "strong trend" | `ta.4h.adx >= 15` (moderate) or `>= 20` (strong). In AND group use ≥12; in OR group use ≥18 |
 | "price near lower Bollinger / support" | `ta.4h.bb_lower` (price near lower band) |
 | "EMA bullish cross / golden cross" | `ta.4h.ema_9 > ta.4h.ema_21` |
 | "high funding rate / crowded longs" | `market.funding_current >= 0.03` |
@@ -1111,7 +1130,7 @@ Ask: "What's your wallet address for withdrawals? This restricts where funds can
 | Metric | Typical live range | Loose | Moderate | Strict | Notes |
 |--------|-------------------|-------|----------|--------|-------|
 | `ta.{tf}.supertrend_advice` | "buy" / "sell" | =="buy" | =="buy" | =="buy" | Direct trend signal. One of the clearest indicators |
-| `ta.{tf}.adx` | 10–50 | ≥15 | ≥18 | ≥25 | Trend STRENGTH only. 10–20=ranging, 20–30=trending, 30+=strong |
+| `ta.{tf}.adx` | 10–50 | ≥12 | ≥15 | ≥20 | Trend STRENGTH only. <15=ranging, 15–25=trending, 25+=strong. In ranging markets (BTC/SOL) stays 10–15 for days |
 | `ta.{tf}.plus_di` / `minus_di` | 10–40 | — | — | — | Use with ADX: +DI>-DI=bullish, -DI>+DI=bearish |
 | `ta.{tf}.aroon_up` / `aroon_down` | 0–100 | ≥60 / ≤40 | ≥70 / ≤30 | ≥80 / ≤20 | Strong uptrend: up>70, down<30 |
 
@@ -1141,27 +1160,74 @@ Ask: "What's your wallet address for withdrawals? This restricts where funds can
 
 > **Key observations from live data:**
 > - SM ratios fluctuate widely by category — `stable` category has stronger directional bias than `high_win_rate`.
-> - ADX in ranging markets stays 10–20; only trending markets reach 25+. Use ≥18 as a practical minimum.
+> - ADX in ranging markets stays 10–15 for days (BTC/SOL observed at 12). Use ≥12 in AND groups, ≥15–18 in OR groups. Never use ≥20+ as a flat AND condition.
 > - `funding_current` is usually near 0.01; extreme values (>0.03 or <-0.03) are rare but very significant.
 > - Moving averages and Bollinger Bands are price-level metrics — compare them to each other or current price, not to fixed thresholds.
+
+**⚠️ AND/OR Condition Design Guidelines (CRITICAL):**
+
+All `trigger_conditions` must follow the **AND=easy, OR=strict** principle to avoid agents that never trade:
+
+| Rule | Guideline | Example |
+|------|-----------|---------|
+| **AND conditions** | Each should pass individually **~70-80%** of the time. Use relaxed thresholds. | `sm.long_ratio >= 52`, `sm.wallet_count >= 3`, `ta.4h.rsi <= 68` |
+| **OR groups inside AND** | Stricter confirmations — only **1 of N** needs to pass. Allows flexibility. | `OR(ta.4h.adx >= 15, ta.1h.adx >= 15, ta.4h.supertrend == buy)` |
+| **Max AND depth** | Top-level AND should have **2-4 items** (including OR groups). Never 5+ flat AND. | `AND(easy_sm, easy_ta, OR(strict_a, strict_b, strict_c))` |
+| **Exit conditions** | Always use **OR** — any single reversal signal triggers exit. | `OR(sm_flip, ta_reversal, rsi_extreme)` |
+| **Strict in AND = dead agent** | 5 strict AND conditions: 0.3^5 ≈ 0.2% chance of triggering. Agent never trades. | ❌ `AND(sm≥60, wallets≥5, adx≥22, rsi≤50, macd>0)` |
+| **Easy in OR = always triggers** | OR of easy conditions means agent triggers on noise. | ❌ `OR(rsi≤70, sm≥40)` — passes 95%+ of the time |
+| **value_field** | Compare two indicator fields: `{"field": "ta.1h.ema_9", "compare": ">", "value_field": "ta.1h.ema_21"}` | EMA cross, DI cross, price vs MA |
+
+**Recommended threshold ranges for AND vs OR:**
+
+| Metric | In AND (easy, pass ~70%) | In OR (strict, pass ~30%) |
+|--------|--------------------------|---------------------------|
+| `sm.long_ratio` / `sm.short_ratio` | ≥50–52 | ≥55–60 |
+| `sm.wallet_count` | ≥3 | ≥5 |
+| `ta.{tf}.adx` | ≥12 | ≥18 |
+| `ta.{tf}.rsi` (anti-overbought) | ≤68 | ≤60 |
+| `ta.{tf}.supertrend_advice` | OK in AND (binary) | OK in OR (alternative) |
+| `ta.{tf}.macd_hist` direction | Better in OR (flips often) | ✅ good OR candidate |
+
+**Pattern template:**
+```
+entry.long = AND(
+  sm.long_ratio >= 52,           // easy SM filter
+  sm.wallet_count >= 3,          // easy wallet filter
+  OR(                            // at least 1 stricter confirmation
+    ta.4h.supertrend == buy,     // trend direction
+    ta.1h.adx >= 15,             // trend strength
+    sm.long_ratio >= 58          // strong SM override
+  )
+)
+exit.close_long = OR(            // any reversal signal exits
+  sm.short_ratio >= 55,
+  ta.4h.supertrend == sell
+)
+```
 
 **Common strategy patterns (AI should recognize and compose):**
 
 | Strategy pattern | Entry conditions to generate |
 |-----------------|------------------------------|
-| **Momentum / trend following** | SM bullish (long_ratio≥55) AND RSI not overbought (≤65) AND OI rising (oi_change_4h>1) AND ADX≥20 |
-| **Mean reversion / bottom catching** | RSI oversold (≤30) AND funding negative (shorts crowded) AND short liquidations happening |
-| **SM divergence / whale following** | sm.long_ratio≥65 AND sm.wallet_count≥5 AND sm.4h.wallet_count≥3 AND OI flat (≤2%) |
-| **Contrarian / fade the crowd** | Long ratio crowded (≥65%) AND funding extreme (≥0.05) → SHORT. Short ratio crowded (≥65%) AND funding extreme (≤-0.05) → LONG |
-| **Breakout** | SuperTrend=buy AND ADX≥18 AND OI rising (oi_change_4h>1) AND volume rising |
-| **Scalping / quick trades** | sm.long_ratio≥50 AND sm.1h.wallet_count≥1 AND RSI 30-70 AND MACD histogram aligns with direction |
+| **Momentum / trend following** | AND(sm.long_ratio≥52, sm.wallet_count≥3, OR(ADX≥15, SuperTrend=buy)) + RSI not overbought (≤68) |
+| **Mean reversion / bottom catching** | AND(RSI oversold ≤30, OR(funding negative, short liquidations, sm.long_ratio≥55)) |
+| **SM divergence / whale following** | AND(sm.long_ratio≥55, sm.wallet_count≥3, OR(supertrend=buy, ta.4h.rsi≤65, OI flat)) |
+| **Contrarian / fade the crowd** | AND(market.long_ratio≥60, OR(funding≥0.03, sm.short_ratio≥55)) → SHORT |
+| **Breakout** | AND(SuperTrend=buy, OR(ADX≥15 on 4h, ADX≥15 on 1h), OR(OI rising, MACD>0)) |
+| **Scalping / quick trades** | AND(sm.long_ratio≥50, RSI 35-65, OR(MACD 1h>0, MACD 15m>0, SuperTrend=buy)) |
 
 **After collecting user intent, build trigger_conditions JSON:**
 
 trigger_conditions schema (for AI to generate — NOT shown to user):
 ```
-{entry: {long: {op:"and"|"or", conditions:[{field,compare,value}]}, short:{...}},
- exit: {close_long: {op:"and"|"or", conditions:[...]}, close_short:{...}}}
+{entry: {long: {op:"and"|"or", conditions:[...]}, short:{...}},
+ exit: {close_long: {op:"or", conditions:[...]}, close_short:{...}}}
+
+Condition types:
+  Leaf:  {field, compare, value}              // compare field vs constant
+  Cross: {field, compare, value_field}        // compare field vs another field (e.g. EMA cross)
+  Group: {op:"and"|"or", conditions:[...]}    // nested group (OR inside AND)
 ```
 
 Available fields:
@@ -1174,31 +1240,42 @@ Available fields:
 > **Note:** `sm.long_ratio` and `sm.short_ratio` are percentages (0-100), NOT decimals. E.g., 65% long consensus → `sm.long_ratio >= 65` (not 0.65). Direction detection uses ratios: "SM is bullish" = `sm.long_ratio >= 60`, "SM flipped SHORT" = `sm.short_ratio >= 60`.
 
 **Example: user says "I want to buy when smart money is strong and RSI is not overbought, exit when SM flips direction"**
-→ AI generates:
+→ AI generates (AND=easy filters + OR=strict confirmations):
 ```json
 {"entry":{"long":{"op":"and","conditions":[
-  {"field":"sm.long_ratio","compare":">=","value":65},
+  {"field":"sm.long_ratio","compare":">=","value":52},
   {"field":"sm.wallet_count","compare":">=","value":3},
-  {"field":"ta.4h.rsi","compare":"<=","value":65}
+  {"field":"ta.4h.rsi","compare":"<=","value":68},
+  {"op":"or","conditions":[
+    {"field":"sm.long_ratio","compare":">=","value":60},
+    {"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"},
+    {"field":"ta.1h.supertrend_advice","compare":"==","value":"buy"}
+  ]}
 ]}},
 "exit":{"close_long":{"op":"or","conditions":[
-  {"field":"sm.short_ratio","compare":">=","value":60},
-  {"field":"sm.long_ratio","compare":"<=","value":40}
+  {"field":"sm.short_ratio","compare":">=","value":55},
+  {"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"}
 ]}}}
 ```
 
 **Example: user says "Contrarian — buy when everyone is fearful, sell when everyone is greedy"**
-→ AI generates:
+→ AI generates (AND=easy crowd detection + OR=strict confirmation):
 ```json
 {"entry":{"long":{"op":"and","conditions":[
-  {"field":"market.short_ratio","compare":">=","value":65},
-  {"field":"market.funding_current","compare":"<=","value":-0.03},
-  {"field":"ta.4h.rsi","compare":"<=","value":35}
+  {"field":"market.short_ratio","compare":">=","value":60},
+  {"op":"or","conditions":[
+    {"field":"market.funding_current","compare":"<=","value":-0.02},
+    {"field":"ta.4h.rsi","compare":"<=","value":35},
+    {"field":"sm.long_ratio","compare":">=","value":55}
+  ]}
 ]},
 "short":{"op":"and","conditions":[
-  {"field":"market.long_ratio","compare":">=","value":65},
-  {"field":"market.funding_current","compare":">=","value":0.03},
-  {"field":"ta.4h.rsi","compare":">=","value":65}
+  {"field":"market.long_ratio","compare":">=","value":60},
+  {"op":"or","conditions":[
+    {"field":"market.funding_current","compare":">=","value":0.02},
+    {"field":"ta.4h.rsi","compare":">=","value":65},
+    {"field":"sm.short_ratio","compare":">=","value":55}
+  ]}
 ]}},
 "exit":{"close_long":{"op":"or","conditions":[
   {"field":"market.long_ratio","compare":">=","value":55},
@@ -1207,6 +1284,20 @@ Available fields:
 "close_short":{"op":"or","conditions":[
   {"field":"market.short_ratio","compare":">=","value":55},
   {"field":"ta.4h.rsi","compare":"<=","value":40}
+]}}}
+```
+
+**Example: user says "EMA cross with SM confirmation"**
+→ AI generates (uses `value_field` for cross-field comparison):
+```json
+{"entry":{"long":{"op":"and","conditions":[
+  {"field":"sm.long_ratio","compare":">=","value":52},
+  {"field":"ta.1h.supertrend_advice","compare":"==","value":"buy"},
+  {"op":"or","conditions":[
+    {"field":"ta.1h.ema_9","compare":">","value_field":"ta.1h.ema_21"},
+    {"field":"ta.1h.adx","compare":">=","value":15},
+    {"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"}
+  ]}
 ]}}}
 ```
 
@@ -1279,13 +1370,16 @@ When user wants to check positions or trade manually:
 **Check positions:**
 `agent-positions <agent_id>` — Present each position: "BTC LONG — $500 at $95,432 entry — PnL: +$23.45 — 5x leverage"
 
-**Open a position:**
+**Open a position (executes immediately on Hyperliquid):**
 `agent-open <agent_id> --coin BTC --direction LONG --size 100 --leverage 5 --confirm`
 
-**Close a position:**
+**Close a position (executes immediately on Hyperliquid):**
 `agent-close <agent_id> --coin BTC --confirm`
 
-**Check order status:**
+**Update SL/TP (executes immediately on Hyperliquid):**
+`agent-update-sl-tp <agent_id> --coin BTC --stop-loss 94000 --take-profit 100000`
+
+**Check order history:**
 `agent-orders <agent_id>`
 
 ### Market Overview
