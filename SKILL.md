@@ -950,13 +950,19 @@ Ask 2 sub-questions:
 
 If user doesn't have specific preferences, skip this — presets from Q2 are sufficient.
 
+**Q6: Withdrawal address?** → `withdrawal_addresses`
+**ALWAYS ask this before creating the agent.** Without it, funds can be withdrawn to ANY address.
+Ask: "What's your wallet address for withdrawals? This restricts where funds can be sent for security."
+- If user provides an address → set `--withdrawal-addresses 0x...`
+- If user says "skip" or "later" → proceed without it, but warn: "⚠️ No withdrawal whitelist set — funds can be withdrawn to any address. You can add one later with agent-update."
+
 **Intent → trigger_conditions translation guide (for AI use):**
 
 | User says (intent) | Maps to (condition) |
 |-------------------|---------------------|
-| "smart money is buying / bullish" | `sm.long_ratio >= 60` + `sm.wallet_count >= 3` |
-| "strong smart money / high consensus" | `sm.long_ratio >= 70` + `sm.wallet_count >= 5` |
-| "smart money flipped direction" | `sm.short_ratio >= 60` (for close_long) or `sm.long_ratio >= 60` (for close_short) |
+| "smart money is buying / bullish" | `sm.long_ratio >= 55` + `sm.wallet_count >= 3` |
+| "strong smart money / high consensus" | `sm.long_ratio >= 65` + `sm.wallet_count >= 5` |
+| "smart money flipped direction" | `sm.short_ratio >= 55` (for close_long) or `sm.long_ratio >= 55` (for close_short) |
 | "whales are accumulating" | `sm.wallet_count >= 5` + `sm.long_volume > sm.short_volume` |
 | "RSI oversold" | `ta.4h.rsi <= 30` |
 | "RSI overbought" | `ta.4h.rsi >= 70` |
@@ -964,7 +970,7 @@ If user doesn't have specific preferences, skip this — presets from Q2 are suf
 | "MACD bullish / momentum rising" | `ta.4h.macd_hist > 0` |
 | "uptrend / trend is up" | `ta.4h.supertrend_advice == "buy"` |
 | "downtrend / trend is down" | `ta.4h.supertrend_advice == "sell"` |
-| "strong trend" | `ta.4h.adx >= 25` |
+| "strong trend" | `ta.4h.adx >= 18` (moderate) or `>= 25` (strong) |
 | "price near lower Bollinger / support" | `ta.4h.bb_lower` (price near lower band) |
 | "EMA bullish cross / golden cross" | `ta.4h.ema_9 > ta.4h.ema_21` |
 | "high funding rate / crowded longs" | `market.funding_current >= 0.03` |
@@ -973,20 +979,83 @@ If user doesn't have specific preferences, skip this — presets from Q2 are suf
 | "OI dropping / money flowing out" | `market.oi_change_4h < 0` |
 | "short squeeze / short liquidations" | `market.liquidation_short_4h > 0` |
 | "long squeeze / long liquidations" | `market.liquidation_long_4h > 0` |
-| "more buying volume" | `market.taker_buy_sell_ratio > 0.55` |
+| "more buying volume" | `market.taker_buy_sell_ratio > 0.51` (typical range: 0.48–0.52) |
 | "heavy shorting / crowd is short" | `market.short_ratio >= 60` |
 | "contrarian / fade the crowd" | `market.long_ratio >= 65` → SHORT, or `market.short_ratio >= 65` → LONG |
+
+**Recommended Threshold Ranges** (based on real market data analysis):
+
+**Smart Money (SM):**
+
+| Metric | Typical live range | Loose | Moderate | Strict | Notes |
+|--------|-------------------|-------|----------|--------|-------|
+| `sm.long_ratio` / `sm.short_ratio` | 30–70% | ≥50 | ≥55 | ≥65 | `stable` cat has stronger bias than `high_win_rate` |
+| `sm.wallet_count` | 10–300+ | ≥1 | ≥3 | ≥5 | More wallets = higher confidence. Varies by category filter |
+| `sm.{tf}.wallet_count` | 0–100+ | ≥1 | ≥2 | ≥3 | Per-TF count. 1h has fewest wallets, 24h has most |
+| `sm.long_volume` / `sm.short_volume` | 0–50M+ USD | — | — | — | Use for volume-weighted signals; compare long vs short |
+
+**Technical Analysis (TA) — Momentum:**
+
+| Metric | Typical live range | Loose | Moderate | Strict | Notes |
+|--------|-------------------|-------|----------|--------|-------|
+| `ta.{tf}.rsi` | 30–70 | 25–75 | 30–70 | 35–65 | Oversold ≤30, overbought ≥70. Rarely hits extremes on 4h |
+| `ta.{tf}.macd_hist` | -200 to +200 (BTC) | — | >0 / <0 | — | Sign matters more than magnitude. Positive=bullish |
+| `ta.{tf}.stoch_k` | 0–100 | ≤25 / ≥75 | ≤20 / ≥80 | ≤15 / ≥85 | Fast oscillator. K<20=oversold, K>80=overbought |
+| `ta.{tf}.cci` | -200 to +200 | ≤-80 / ≥80 | ≤-100 / ≥100 | ≤-150 / ≥150 | >100=overbought zone, <-100=oversold zone |
+| `ta.{tf}.mfi` | 0–100 | ≤25 / ≥75 | ≤20 / ≥80 | ≤15 / ≥85 | Volume-weighted RSI. Similar ranges to RSI |
+| `ta.{tf}.willr` | -100 to 0 | ≤-75 / ≥-25 | ≤-80 / ≥-20 | ≤-90 / ≥-10 | Near 0=overbought, near -100=oversold |
+
+**Technical Analysis (TA) — Trend:**
+
+| Metric | Typical live range | Loose | Moderate | Strict | Notes |
+|--------|-------------------|-------|----------|--------|-------|
+| `ta.{tf}.supertrend_advice` | "buy" / "sell" | =="buy" | =="buy" | =="buy" | Direct trend signal. One of the clearest indicators |
+| `ta.{tf}.adx` | 10–50 | ≥15 | ≥18 | ≥25 | Trend STRENGTH only. 10–20=ranging, 20–30=trending, 30+=strong |
+| `ta.{tf}.plus_di` / `minus_di` | 10–40 | — | — | — | Use with ADX: +DI>-DI=bullish, -DI>+DI=bearish |
+| `ta.{tf}.aroon_up` / `aroon_down` | 0–100 | ≥60 / ≤40 | ≥70 / ≤30 | ≥80 / ≤20 | Strong uptrend: up>70, down<30 |
+
+**Technical Analysis (TA) — Moving Averages & Volatility:**
+
+| Metric | Typical live range | Usage | Notes |
+|--------|-------------------|-------|-------|
+| `ta.{tf}.ema_9`, `ema_21`, `ema_55` | Price-level | ema_9 > ema_21 = bullish cross | Compare to each other, not absolute thresholds |
+| `ta.{tf}.sma_20`, `sma_50`, `sma_200` | Price-level | Price > sma_50 = bullish bias | Golden cross: sma_50 > sma_200 |
+| `ta.{tf}.bb_upper/middle/lower` | Price-level | Price near bb_lower = potential bounce | Band squeeze = imminent breakout |
+| `ta.{tf}.atr` | Varies by asset | — | Volatility magnitude. Use for dynamic SL/TP sizing |
+| `ta.{tf}.natr` | 1–8% | >3% moderate, >5% high vol | ATR as % of price. Comparable across assets |
+
+**Market Data (Derivatives):**
+
+| Metric | Typical live range | Loose | Moderate | Strict | Notes |
+|--------|-------------------|-------|----------|--------|-------|
+| `market.taker_buy_sell_ratio` | 0.48–0.52 | >0.505 / <0.495 | >0.51 / <0.49 | >0.52 / <0.48 | Very narrow band — most of time near 0.50 |
+| `market.funding_current` | -0.01 to +0.03 | ≥0.01 / ≤-0.005 | ≥0.02 / ≤-0.01 | ≥0.03 / ≤-0.03 | Positive=crowded longs (contrarian bearish) |
+| `market.oi_change_1h` | -3% to +3% | >0.5 / <-0.5 | >1 / <-1 | >2 / <-2 | Rising OI + rising price = bullish |
+| `market.oi_change_4h` | -5% to +5% | >1 / <-1 | >2 / <-2 | >3 / <-3 | Better for swing signals than 1h |
+| `market.oi_change_24h` | -10% to +10% | >2 / <-2 | >4 / <-4 | >6 / <-6 | Broad trend in open interest |
+| `market.long_ratio` / `short_ratio` | 40–60% | ≥55 / ≤45 | ≥60 / ≤40 | ≥65 / ≤35 | Exchange L/S ratio. Contrarian: crowded longs=bearish |
+| `market.liquidation_long_24h` | 0–100M+ | >1M | >5M | >10M | High long liquidations = bearish pressure |
+| `market.liquidation_short_24h` | 0–100M+ | >1M | >5M | >10M | High short liquidations = short squeeze (bullish) |
+| `market.volume_24h` | Varies | — | — | — | Context metric. Higher volume = stronger signal confidence |
+| `market.price_change_24h` | -10% to +10% | — | — | — | Context for OI interpretation |
+
+> **Key observations from live data:**
+> - `taker_buy_sell_ratio` stays in a very narrow band (0.48–0.52). Use loose thresholds (>0.505) for more signals.
+> - SM ratios fluctuate widely by category — `stable` category has stronger directional bias than `high_win_rate`.
+> - ADX in ranging markets stays 10–20; only trending markets reach 25+. Use ≥18 as a practical minimum.
+> - `funding_current` is usually near 0.01; extreme values (>0.03 or <-0.03) are rare but very significant.
+> - Moving averages and Bollinger Bands are price-level metrics — compare them to each other or current price, not to fixed thresholds.
 
 **Common strategy patterns (AI should recognize and compose):**
 
 | Strategy pattern | Entry conditions to generate |
 |-----------------|------------------------------|
-| **Momentum / trend following** | SM bullish (long_ratio≥60) AND RSI not overbought (≤65) AND OI rising AND taker ratio>0.55 |
+| **Momentum / trend following** | SM bullish (long_ratio≥55) AND RSI not overbought (≤65) AND OI rising AND taker ratio>0.51 |
 | **Mean reversion / bottom catching** | RSI oversold (≤30) AND funding negative (shorts crowded) AND short liquidations happening |
-| **SM divergence / whale following** | sm.long_ratio≥70 AND sm.wallet_count≥5 AND sm.4h.wallet_count≥3 AND OI flat (≤2%) |
+| **SM divergence / whale following** | sm.long_ratio≥65 AND sm.wallet_count≥5 AND sm.4h.wallet_count≥3 AND OI flat (≤2%) |
 | **Contrarian / fade the crowd** | Long ratio crowded (≥65%) AND funding extreme (≥0.05) → SHORT. Short ratio crowded (≥65%) AND funding extreme (≤-0.05) → LONG |
-| **Breakout** | SuperTrend=buy AND ADX≥25 AND OI rising AND volume taker ratio>0.55 |
-| **Scalping / quick trades** | sm.long_ratio≥55 AND sm.1h.wallet_count≥2 AND RSI 30-70 AND MACD histogram aligns with direction |
+| **Breakout** | SuperTrend=buy AND ADX≥18 AND OI rising AND volume taker ratio>0.51 |
+| **Scalping / quick trades** | sm.long_ratio≥50 AND sm.1h.wallet_count≥1 AND RSI 30-70 AND MACD histogram aligns with direction |
 
 **After collecting user intent, build trigger_conditions JSON:**
 
@@ -1064,6 +1133,13 @@ agent-create --name "SM Divergence Hunter" --type precision_master --assets BTC,
 #### Step 3: Review & Deploy
 1. `agent-get <agent_id>` — review full config
 2. `agent-deploy <agent_id>` — validate and enable
+3. **Telegram notifications** — After deploy, check if user has Telegram connected:
+   - Run `telegram-config` to check
+   - If **not connected**: strongly recommend setup, especially for HITL agents:
+     > "Your agent is deployed! 🎉 I recommend connecting Telegram so you get instant trade notifications. For HITL agents this is essential — you'll receive trade plans with Approve/Reject buttons directly in Telegram. Want me to help you set it up? You just need a Telegram bot token from @BotFather."
+   - If **already connected**: confirm: "Telegram notifications are active — you'll receive trade alerts there."
+   - For `auto` mode agents: "Telegram is optional but recommended — you'll get notified when the agent opens/closes positions."
+   - For `hitl` mode agents: "⚠️ Telegram is strongly recommended for HITL agents. Without it, you'll need to manually check for pending trade plans via chat. Plans expire after 2 hours."
 
 #### Step 4: Fund the Agent
 The vault (deposit address) is auto-created with the agent. The create response includes it.
