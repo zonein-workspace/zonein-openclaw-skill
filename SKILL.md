@@ -285,15 +285,13 @@ HIP-3 = **builder-deployed perpetuals** on Hyperliquid — stocks (TSLA, NVDA), 
 
 ### Creating a HIP-3 Agent
 
-Use `agent-create` with `dex:COIN` in `allowed_assets`. Use `hip3_*` agent types for HIP-3 specific SM categories:
+Use `agent-create` with `dex:COIN` in `allowed_assets`. The AI infers a `hip3_*` agent type from the user's trading style. Follow the full Agent Creation Flow (Step 1–5) — always include `--trigger-conditions` and `--prompt-config`.
 
 ```
-agent-create --name "Stock Trader" --type hip3_whale_follower --assets xyz:TSLA,xyz:NVDA,xyz:GOLD --execution-mode hitl --leverage 5 --sl-pct 3 --tp-pct 6
+agent-create --name "Stock Trader" --type hip3_whale_follower --assets xyz:TSLA,xyz:NVDA,xyz:GOLD --execution-mode hitl --leverage 5 --trigger-conditions '{...}' --prompt-config '{"trading_strategy":"...","custom_rules":"HIP-3 fees are 2x — factor into TP. Isolated margin only.","risk_management":"SL 3%, TP 6%, max 5x"}'
 ```
 
 Perp agent types also work — SM data falls back to all HIP-3 smart money wallets.
-
-Custom rules should mention: "HIP-3 fees are 2x — factor into TP. Isolated margin only."
 
 ### HIP-3 Trading Commands
 
@@ -944,7 +942,7 @@ Before deploying, ensure ALL of these fields exist in the agent config. Deploy w
 
 | # | Field | Auto-filled? | Source |
 |---|-------|-------------|--------|
-| 1 | `trigger_conditions` | ❌ AI generates from Q4 | Controls when agent enters/exits trades. AI extracts from user's strategy description using the translation guide + examples below |
+| 1 | `trigger_conditions` | ❌ AI generates from Q4 | **MUST be in agent-create call.** Never create without it. Never add separately. AI auto-generates from user's strategy description. |
 | 2 | `trading_risk` | ✅ auto-generated from `risk_profile` + `max_leverage` | SL/TP, position sizing, leverage |
 | 3 | `llm` | ✅ auto-generated from `model_provider` + `model_name` | LLM for trade decisions |
 | 4 | `signal_weights` | ✅ from `agent_type` preset | SM/TA/Market weighting |
@@ -960,26 +958,61 @@ Before deploying, ensure ALL of these fields exist in the agent config. Deploy w
 
 #### Step 1: Collect Agent Configuration
 
+**⚠️ CRITICAL — Agent Creation Rules (MUST follow):**
+1. **NEVER present `--type` or agent type names to the user.** Ask about trading style in plain language (Q2), then infer `agent_type` internally using the mapping guide.
+2. **NEVER create an agent without `trigger_conditions`.** Always auto-generate from user's strategy and include in the single `agent-create` call.
+3. **NEVER ask the user to separately add or confirm `trigger_conditions`.** Generate silently from their strategy, summarize in plain language.
+4. **ALWAYS show 3 strategy examples** (randomly picked from the list in Q4) when asking about strategy.
+5. **ONE command creates everything.** The `agent-create` call MUST include `--trigger-conditions` + `--prompt-config`. Never create then update separately.
+
 Collect these parameters from the user:
 
 **Q1: Which coins?** → `allowed_assets`
 Options: BTC, ETH, SOL, HYPE (multi-select). For HIP-3: use `dex:COIN` format (e.g. `xyz:TSLA,xyz:NVDA,xyz:GOLD`). Run `hip3-assets xyz` to see available assets.
 
-**Q2: Trading style?** → `agent_type` preset
-Each preset auto-fills SM categories, strength thresholds, and timeframe weights:
+**Q2: What's your trading style?** → AI infers `agent_type`
 
-| Style | `agent_type` | SM Categories | Thresholds (buy/sell) | Timeframes (24h/4h/1h) |
-|-------|-------------|--------------|----------------------|------------------------|
-| Scalping | `scalping_pro` | scalper, short_term_trading | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% (short-term focus) |
-| Swing | `swing_trader` | swing_trading, stable, high_win_rate | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% (long-term focus) |
-| Momentum | `momentum_hunter` | high_risk_high_return, momentum_trader, short_term_trading | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% |
-| Whale Following | `whale_follower` | btc_trader, large_cap_trader | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| Conservative | `stable_grower` | stable, high_win_rate, swing_trading | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| Precision | `precision_master` | high_win_rate, swing_trading, trend_follower | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| Balanced | `composite` | ALL categories | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| HIP-3 Whale | `hip3_whale_follower` | whale_trader, high_pnl_trader, perp_verified | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| HIP-3 Diversified | `hip3_diversified` | diversified_trader, risk_manager, balanced_trader | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
-| HIP-3 Conviction | `hip3_conviction` | high_conviction, high_pnl_trader, whale_trader | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% |
+Ask in natural language. **Do NOT show type names or a selection list.** Let the user describe what they want, then map internally.
+
+**How to ask:**
+> "How do you like to trade? For example:"
+> - "I want to follow what the big wallets are doing"
+> - "Quick in-and-out trades, small TP/SL"
+> - "Hold positions for days or weeks, wait for clean setups"
+> - "Play it safe, only enter when I'm really confident"
+> - "Go big when the opportunity is strong"
+
+**AI mapping guide** (internal — never show to user):
+
+| User says (intent) | → `agent_type` |
+|-------------------|----------------|
+| Follow whales / big money / smart money | `whale_follower` (perp) or `hip3_whale_follower` (HIP-3) |
+| Quick trades / scalping / fast in-and-out | `scalping_pro` |
+| Hold days-weeks / swing / patient setups | `swing_trader` |
+| Momentum / trend / ride strong moves | `momentum_hunter` |
+| Safe / conservative / low risk | `stable_grower` |
+| Precise entries / sniper / high accuracy | `precision_master` |
+| Balanced / no strong preference | `composite` |
+| Aggressive + conviction / go big on opportunities | `hip3_conviction` (HIP-3) or `momentum_hunter` (perp) |
+| Diversified / spread across many assets | `hip3_diversified` (HIP-3) or `composite` (perp) |
+| Unclear / vague | Default: `composite` (perp) or `hip3_diversified` (HIP-3) |
+
+**Auto-select HIP-3 types** when `allowed_assets` contains `dex:COIN` format. Fall back to perp types for BTC/ETH/SOL/HYPE.
+
+**Full preset reference** (AI uses after inferring type — do NOT show to user):
+
+| `agent_type` | SM Categories | Thresholds (buy/sell) | Timeframes (24h/4h/1h) |
+|-------------|--------------|----------------------|------------------------|
+| `scalping_pro` | scalper, short_term_trading | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% |
+| `swing_trader` | swing_trading, stable, high_win_rate | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `momentum_hunter` | high_risk_high_return, momentum_trader, short_term_trading | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% |
+| `whale_follower` | btc_trader, large_cap_trader | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `stable_grower` | stable, high_win_rate, swing_trading | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `precision_master` | high_win_rate, swing_trading, trend_follower | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `composite` | ALL categories | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `hip3_whale_follower` | whale_trader, high_pnl_trader, perp_verified | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `hip3_diversified` | diversified_trader, risk_manager, balanced_trader | BTC 75/70, ETH 78/70, SOL+ 82/70 | 50%/35%/15% |
+| `hip3_conviction` | high_conviction, high_pnl_trader, whale_trader | BTC 65/65, ETH 70/65, SOL+ 78/65 | 20%/40%/40% |
 
 **Q3: Risk profile?** → `trading_risk` + `risk_profile`
 
@@ -993,14 +1026,14 @@ Each preset auto-fills SM categories, strength thresholds, and timeframe weights
 
 **⚠️ REQUIRED — Always ask this.** This is the most important question. All agents use SM + TA + Market data — this question determines the **trading philosophy**: when to pull the trigger, how patient to be, and what edge to exploit.
 
-**How to ask:**
-Show 3 random examples from the 10 below, then ask user to describe their strategy. Each user should see different examples.
+**How to ask (MANDATORY — always show examples first):**
+You MUST show exactly 3 examples (randomly picked from the list below) before asking. Without examples, users give vague answers like "trend following" which produce poor trigger_conditions.
 
 > "Describe your trading strategy in 2-3 sentences. Be specific about which signals matter most to you."
 >
 > **Examples (pick 3 to show):**
 
-**10 Strategy Examples** (each is unique style + specific metrics):
+**13 Strategy Examples** (each is unique style + specific metrics — includes HIP-3):
 
 1. **Trend Confirmation Rider** — "Enter LONG when SM long_ratio ≥50% with ≥3 wallets AND SuperTrend 'buy' on 4h AND ADX ≥15. Exit when SM short_ratio ≥55% AND SuperTrend flips to sell."
 
@@ -1022,6 +1055,12 @@ Show 3 random examples from the 10 below, then ask user to describe their strate
 
 10. **Smart Money Front-Runner** — "Enter immediately when SM 1h wallet_count jumps to ≥5 with ratio ≥55%. Speed over TA confirmation. Tight stop."
 
+11. **HIP-3 Trend Surfer** — "Trade HIP-3 stocks (TSLA, NVDA) following 4h SuperTrend direction. Enter when SM long_ratio ≥50% AND ADX ≥15. Exit when SuperTrend flips AND SM reverses. SL 3%, TP 6%."
+
+12. **HIP-3 Commodity Momentum** — "Trade GOLD/OIL on momentum. Enter LONG when SM wallet_count ≥3 AND RSI 4h 35-65 AND MACD bullish. Exit when SM flips short AND SuperTrend=sell. Conservative leverage 3x."
+
+13. **HIP-3 Diversified Portfolio** — "Spread across 5+ HIP-3 assets (stocks + crypto + commodities). Enter when SM consensus ≥50% AND at least 1 TA confirmation. Patient entries, wide stops. Hold through noise."
+
 ---
 
 **How to collect user strategy:**
@@ -1034,7 +1073,7 @@ Show 3 random examples, then ask:
 >
 > "Describe your strategy in 2-3 sentences with specific metrics. What signals should trigger entry? What conditions mean exit?"
 
-**If user describes in their own words:** Use the Intent → trigger_conditions translation guide below to build custom conditions. **DO NOT** show JSON to user. Build it, then summarize back in plain language for confirmation.
+**If user describes in their own words:** Use the Intent → trigger_conditions translation guide below to build custom conditions. **DO NOT** show JSON to user. Build it, include it in the `agent-create` call, and summarize back in plain language. **NEVER create the agent first then add trigger_conditions separately.**
 
 **If user says "defaults" / "use defaults":** Use preset from Q2 (trading style). Still generate `custom_rules` describing what the preset does.
 
@@ -1066,7 +1105,7 @@ If the user has more specific trading philosophy beyond Q4, collect it here. Exa
 - "Only trade during high volume hours"
 - "Never hold through funding payment"
 
-The prompt_config fields (AI generates from Q4 + Q5 answers):
+The prompt_config fields (AI generates from Q4 + Q6 answers):
 - `trading_strategy`: Overall approach description (from Q4 answer)
 - `custom_rules`: Specific entry/exit rules matching trigger_conditions (from Q4)
 - `risk_management`: Risk rules matching Q3 risk profile
@@ -1246,9 +1285,11 @@ After generating, present a **plain-language summary** to user for confirmation:
 
 Use `agent-create` command. Build the call from collected answers.
 
-**Example — Momentum BTC trader, moderate risk, SM+TA combined signals:**
+**⚠️ Every agent-create call MUST include `--trigger-conditions` AND `--prompt-config`. Without both, the agent will be incomplete and cannot be deployed.**
+
+**Example — Momentum BTC trader (all required fields in one command):**
 ```
-agent-create --name "BTC Momentum" --type momentum_hunter --assets BTC,ETH --leverage 5 --risk-per-trade 1 --max-daily-loss 3 --risk-reward 1:2 --min-confidence 0.8 --min-consensus 0.7 --prompt-config '{"trading_strategy":"Momentum trading following SM consensus with RSI and taker ratio confirmation on BTC and ETH","custom_rules":"Entry LONG: SM long_ratio >=50 with TA confirmation (SuperTrend/ADX), wallet_count >=3, RSI <=65. Entry SHORT: SM short_ratio >=50 with TA confirmation, RSI >=35. Exit requires 2+ reversal signals (SM flip AND SuperTrend reversal). SL/TP on exchange is primary exit.","risk_management":"Max 5 positions, 1% risk per trade, 3% max daily loss, 5x leverage"}'
+agent-create --name "BTC Momentum" --type momentum_hunter --assets BTC,ETH --leverage 5 --risk-per-trade 1 --max-daily-loss 3 --risk-reward 1:2 --min-confidence 0.8 --min-consensus 0.7 --trigger-conditions '{"entry":{"long":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"field":"ta.4h.rsi","compare":"<=","value":68},{"op":"or","conditions":[{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"},{"field":"ta.4h.adx","compare":">=","value":15}]}]},"short":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"field":"ta.4h.rsi","compare":">=","value":32},{"op":"or","conditions":[{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"},{"field":"ta.4h.adx","compare":">=","value":15}]}]}},"exit":{"long":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"}]},"short":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"}]}}}' --prompt-config '{"trading_strategy":"Momentum trading following SM consensus with TA confirmation on BTC and ETH","custom_rules":"Entry LONG: SM long_ratio >=50 with SuperTrend/ADX confirm + RSI not overbought. Exit: SM reversal AND SuperTrend flip. SL/TP on exchange is primary exit.","risk_management":"Max 5 positions, 1% risk per trade, 3% max daily loss, 5x leverage"}'
 ```
 
 **Example — Advanced with custom trigger_conditions:**
@@ -1256,7 +1297,12 @@ agent-create --name "BTC Momentum" --type momentum_hunter --assets BTC,ETH --lev
 agent-create --name "SM Divergence Hunter" --type precision_master --assets BTC,ETH,SOL --trigger-conditions '{"entry":{"long":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"field":"ta.4h.rsi","compare":"<=","value":60},{"op":"or","conditions":[{"field":"sm.long_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"}]}]},"short":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"field":"ta.4h.rsi","compare":">=","value":40},{"op":"or","conditions":[{"field":"sm.short_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"}]}]}},"exit":{"long":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":56},{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"}]},"short":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":56},{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"}]}}}' --leverage 5 --prompt-config '{"trading_strategy":"Precision entries on strong SM divergence with TA confirmation","custom_rules":"Entry requires SM ratio >=50 with TA confirmation + >=3 wallets AND RSI not extreme. Exit requires 2 confirmations: SM reversal AND SuperTrend flip. SL/TP on exchange is primary exit.","risk_management":"Tight SL 0.5%, TP 1%, max 10x leverage"}'
 ```
 
-> **Note:** `--prompt-config` with `trading_strategy` and `custom_rules` is required. Without it, deploy will fail. AI should auto-generate this from Q4 answers.
+> **Note:** Both `--trigger-conditions` AND `--prompt-config` are REQUIRED. Deploy will fail without them. AI auto-generates both from Q4 answers. Never create without them.
+
+**Example — HIP-3 stock trader (auto, aggressive):**
+```
+agent-create --name "HIP3 Trend Rider" --type hip3_diversified --assets xyz:TSLA,xyz:NVDA,xyz:GOLD --execution-mode auto --leverage 5 --trigger-conditions '{"entry":{"long":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"op":"or","conditions":[{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"},{"field":"ta.4h.adx","compare":">=","value":15},{"field":"sm.long_ratio","compare":">=","value":55}]}]},"short":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":50},{"field":"sm.wallet_count","compare":">=","value":3},{"op":"or","conditions":[{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"},{"field":"ta.4h.adx","compare":">=","value":15},{"field":"sm.short_ratio","compare":">=","value":55}]}]}},"exit":{"long":{"op":"and","conditions":[{"field":"sm.short_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"sell"}]},"short":{"op":"and","conditions":[{"field":"sm.long_ratio","compare":">=","value":55},{"field":"ta.4h.supertrend_advice","compare":"==","value":"buy"}]}}}' --prompt-config '{"trading_strategy":"Trade HIP-3 stocks/commodities following 4h trend with SM confirmation","custom_rules":"Entry: SM ratio >=50 + wallet_count >=3 + trend/ADX confirm. Exit: SM reversal AND SuperTrend flip. HIP-3 fees are 2x standard \u2014 factor into TP targets.","risk_management":"SL 3%, TP 6%, max 5x leverage, isolated margin only"}' --withdrawal-addresses 0x...
+```
 
 #### Step 3: Review & Deploy
 1. `agent-get <agent_id>` — review full config
@@ -1294,15 +1340,15 @@ When user wants to check positions or trade manually:
 
 **Open a position (executes immediately on Hyperliquid):**
 `agent-open <agent_id> --coin BTC --direction LONG --size 100 --leverage 5 --confirm`
-`agent-open <agent_id> --coin xyz:TSLA --direction LONG --size 500 --leverage 5 --sl 375 --tp 420 --confirm` *(HIP-3)*
+`agent-open <agent_id> --coin xyz:TSLA --direction LONG --size 500 --leverage 5 --stop-loss 375 --take-profit 420 --confirm` *(HIP-3)*
 
 **Close a position (executes immediately on Hyperliquid):**
 `agent-close <agent_id> --coin BTC --confirm`
 `agent-close <agent_id> --coin xyz:TSLA --confirm` *(HIP-3)*
 
 **Update SL/TP (executes immediately on Hyperliquid):**
-`agent-update-sl-tp <agent_id> --coin BTC --stop-loss 94000 --take-profit 100000`
-`agent-update-sl-tp <agent_id> --coin xyz:TSLA --stop-loss 380 --take-profit 430` *(HIP-3)*
+`agent-update-sl-tp <agent_id> --coin BTC --stop-loss 94000 --take-profit 100000 --confirm`
+`agent-update-sl-tp <agent_id> --coin xyz:TSLA --stop-loss 380 --take-profit 430 --confirm` *(HIP-3)*
 
 **Check order history:**
 `agent-orders <agent_id>`
