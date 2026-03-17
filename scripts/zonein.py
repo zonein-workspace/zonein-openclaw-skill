@@ -376,6 +376,49 @@ def cmd_agent_create(args):
     if args.withdrawal_addresses:
         body["withdrawal_addresses"] = [a.strip() for a in args.withdrawal_addresses.split(",")]
     data = api_post("/agents/", body)
+    # Extract and promote critical fields to top level for LLM safety.
+    agent_id = (data.get("agent") or {}).get("agent_id", "UNKNOWN")
+    vault = data.get("vault") or {}
+    deposit_address = vault.get("address", "NONE")
+    data["CRITICAL_AGENT_ID"] = agent_id
+    data["CRITICAL_DEPOSIT_ADDRESS"] = deposit_address
+
+    # Script-side verification: call deposit-info API to double-confirm address
+    # AND fetch enhanced deposit info (payment link, QR, Arbiscan).
+    verification = "SKIPPED"
+    deposit_info = {}
+    if deposit_address and deposit_address != "NONE" and agent_id != "UNKNOWN":
+        try:
+            verify_data = _do_request(f"/agents/{agent_id}/deposit-info", method="GET")
+            verified_address = (verify_data or {}).get("deposit_address", "")
+            if verified_address == deposit_address:
+                verification = f"VERIFIED_OK — deposit-info confirmed {deposit_address}"
+                deposit_info = {
+                    "payment_link": verify_data.get("payment_link", ""),
+                    "qr_code_url": verify_data.get("qr_code_url", ""),
+                    "verify_address_url": verify_data.get("verify_address_url", ""),
+                    "chain": verify_data.get("chain", "Arbitrum One"),
+                    "token": verify_data.get("token", "USDC"),
+                    "safety_warnings": verify_data.get("safety_warnings", []),
+                }
+            else:
+                verification = (
+                    f"MISMATCH — create returned {deposit_address} "
+                    f"but deposit-info returned {verified_address} — DO NOT USE"
+                )
+        except Exception:
+            verification = f"VERIFY_FAILED — could not reach deposit-info, use with caution: {deposit_address}"
+
+    data["ADDRESS_VERIFICATION"] = verification
+    if deposit_info:
+        data["DEPOSIT_INFO"] = deposit_info
+    data["CRITICAL_NOTICE"] = (
+        f"AGENT_ID={agent_id} | DEPOSIT_ADDRESS={deposit_address} | "
+        f"VERIFICATION={verification} | "
+        "You MUST copy these values EXACTLY from this output. "
+        "DO NOT generate or guess agent IDs or wallet addresses from memory. "
+        "Use DEPOSIT_INFO.payment_link or qr_code_url for safest deposit."
+    )
     _output(data)
 
 
