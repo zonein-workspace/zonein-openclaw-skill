@@ -203,8 +203,8 @@ Server auto-generates `trigger_conditions`, `prompt_config`, `trading_risk` if n
 🔗 Verify on Arbiscan: {verify_address_url}
 
 ✅ SAFEST — scan QR or click payment link to auto-fill your wallet:
-![Deposit QR]({qr_code_url})
-Payment link: {payment_link}
+🔲 QR Code: {qr_code_url}
+💳 Payment link: {payment_link}
 
 ⚠️ ONLY send USDC on Arbitrum (chain 42161). Wrong chain/token = lost funds.
 Gas fees sponsored by Zonein — no ETH needed.
