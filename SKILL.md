@@ -1,30 +1,20 @@
 ---
-name: zonein
-version: 2.3.0
+name: hyperliquid-trading-agent
+version: 2.3.6
 description: |
-  Trading OS for smarter agents on Hyperliquid & Polymarket. Create, backtest, and deploy autonomous
-  trading agents with one skill install. Real-time smart money signals from 500+ profiled wallets,
-  multi-timeframe TA, derivatives flow, composite AI signals, and a self-learning engine.
-  Supports: Hyperliquid perps, spot, HIP-3 (stocks, commodities, indices), and Polymarket.
-  Use when: user asks about smart money, whale activity, trading signals, crypto market analysis,
-  creating/managing trading agents, perpetual futures, prediction markets, or HIP-3 stock trading.
-  30+ commands. One API key. From zero to live trading agent in one conversation.
+  Autonomous Hyperliquid trading agent powered by smart money signals. Create, backtest, and deploy AI trading agents that track 500+ whale wallets on Hyperliquid — perps, spot, and HIP-3 assets (TSLA, NVDA, GOLD, US500). Multi-timeframe technical analysis, derivatives flow, funding rates, liquidation maps, and a self-learning execution engine. HITL trade plans via Telegram. Also supports Polymarket prediction markets. 30+ commands, one API key.
 homepage: https://zonein.xyz
 compatibility: Requires python3. OpenClaw workspace with ZONEIN_API_KEY configured.
 metadata: {"openclaw":{"emoji":"🧠","requires":{"bins":["python3"],"env":["ZONEIN_API_KEY"]},"primaryEnv":"ZONEIN_API_KEY","files":["scripts/*","references/*"],"installer":{"instructions":"1. Go to https://app.zonein.xyz\n2. Log in with your refcode\n3. Click 'Get API Key' button\n4. Copy the key and paste it below"}}}
 ---
 
-# Zonein: Trading OS for Smarter Agents on Hyperliquid & Polymarket
+# Hyperliquid Trading Agent — Smart Money Signals & Autonomous Execution
 
-Create, backtest, and deploy autonomous trading agents with one skill install.
+Autonomous Hyperliquid trading agent powered by real-time smart money signals from 500+ whale wallets. Create, backtest, and deploy AI trading agents with one skill install.
 
-ZoneIn gives your OpenClaw agent a full trading stack - real-time smart money
-signals from 500+ profiled wallets, multi-timeframe technical analysis, derivatives
-flow, composite AI signals, and a self-learning engine. Agents get smarter after
-every trade.
+ZoneIn gives your OpenClaw agent a full trading stack — multi-timeframe technical analysis, derivatives flow, composite AI signals, funding rates, liquidation maps, and a self-learning engine that gets smarter after every trade.
 
-Supports: Hyperliquid perps, spot, HIP-3 (US stocks like TSLA/NVDA, commodities
-like GOLD, indices like US500), and Polymarket prediction markets.
+Supports: Hyperliquid perps, spot, HIP-3 (US stocks like TSLA/NVDA, commodities like GOLD, indices like US500), and Polymarket prediction markets.
 
 30+ commands. One API key. From zero to live trading agent in one conversation.
 
@@ -44,7 +34,7 @@ Use this skill when the user asks about:
 
 The platform makes trading decisions by combining **3 real-time data sources** into a composite AI signal:
 
-1. **Smart Money (SM)** — Tracks ~500+ categorized wallets. Key fields: `sm.long_ratio` (0-100%), `sm.short_ratio`, `sm.wallet_count`, `sm.long_count`, `sm.short_count`. Per-timeframe: `sm.{1h|4h|24h}.{field}`. Direction: `sm.long_ratio >= 60` = bullish.
+1. **Smart Money (SM)** — Tracks ~500+ categorized wallets. Key fields: `sm.long_ratio` (0-100%), `sm.short_ratio`, `sm.wallet_count`, `sm.long_count`, `sm.short_count`. Per-timeframe: `sm.{1h|4h|24h}.{field}`. Direction: `sm.long_ratio >= 50` = bullish (with TA), `>=55` = bullish (standalone).
 2. **Technical Analysis (TA)** — Multi-timeframe (15m/1h/4h/1d) via TAAPI.io. Key fields: `ta.{tf}.supertrend_advice` ("buy"/"sell"), `ta.{tf}.rsi`, `ta.{tf}.adx`, `ta.{tf}.macd_hist`, `ta.{tf}.ema_9/21/55`, `ta.{tf}.bb_upper/lower`.
 3. **Market Data** — Derivatives via CoinGlass. Key fields: `market.funding_current`, `market.oi_change_4h`, `market.long_ratio`, `market.short_ratio`, `market.liquidation_long_4h/short_4h`.
 
@@ -268,6 +258,8 @@ HIP-3 = builder-deployed perpetuals on Hyperliquid — stocks (TSLA, NVDA), comm
 - **`agent-plan-action reject` does NOT need `--confirm`.** Only `approve` and `edit` do.
 - **PM agents not supported yet.** PM data reading (signals, leaderboard, consensus) works. Agent creation is perp-only.
 - **HIP-3 fees are 2x standard.** Always mention this when creating HIP-3 agents. Factor into TP.
+- **High leverage needs wide SL.** 15x+ leverage requires min 5% SL, 10x+ needs 4%, 5x+ needs 3%. Tight SL with high leverage = instant stop-out.
+- **Minimum hold times enforced.** Scalping agents: 1h minimum hold. Others: 3h minimum hold. Prevents rapid cycling.
 - **Withdrawal requires disable first.** `agent-disable` before `agent-withdraw`.
 - **No withdrawal whitelist = ANY address accepted.** If user didn't set `--withdrawal-addresses` during create, warn them to add one via `agent-update` before funding.
 - **Deploy errors return `fix_hint`.** Read and execute it — don't guess.
