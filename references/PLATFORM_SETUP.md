@@ -119,7 +119,7 @@ GPT Custom Actions connect to external APIs via OpenAPI specs.
 2. Click the **Configure** tab → scroll down to **Actions** → **Create new action**
 3. Click **Import from URL** and paste:
    ```
-   https://mcp.zonein.xyz/docs/openapi.json
+   https://mcp.zonein.xyz/openapi.json
    ```
 4. Set **Authentication:**
 
