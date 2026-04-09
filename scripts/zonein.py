@@ -926,6 +926,31 @@ def cmd_status(args):
     data = api_request("/auth/api-key/status")
     _output(data)
 
+    # Zonein Skill Version Check
+    try:
+        import urllib.request
+        import json
+        
+        LOCAL_VERSION = "2.4.0"
+        req = urllib.request.Request(f"{BASE_URL}/version")
+        with urllib.request.urlopen(req, timeout=3.0) as response:
+            v_data = json.loads(response.read().decode())
+            latest = v_data.get("latest_version")
+            
+            # Simple semver comparison
+            def parse_v(v):
+                return tuple(int(x) for x in v.split('.') if x.isdigit())
+                
+            if latest and parse_v(latest) > parse_v(LOCAL_VERSION):
+                print(f"\n\033[93m⚠️ New version {latest} available! (Current: {LOCAL_VERSION})\033[0m")
+                print(f"   Update command: clawhub update zonein")
+                if v_data.get("breaking"):
+                    print("   \033[91m🚨 BREAKING: Update required for continued operation\033[0m")
+                if v_data.get("changelog"):
+                    print(f"   Changelog: {v_data.get('changelog')}")
+    except Exception:
+        pass  # Fail gracefully without breaking status command
+
 
 def main():
     parser = argparse.ArgumentParser(

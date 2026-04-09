@@ -6,7 +6,7 @@ license: Proprietary
 compatibility: Requires python3. ZONEIN_API_KEY environment variable must be set.
 metadata:
   author: zonein
-  version: "2.3.6"
+  version: "2.4.0"
   homepage: "https://zonein.xyz"
   openclaw-emoji: "🧠"
   openclaw-primary-env: ZONEIN_API_KEY
